@@ -1,48 +1,83 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import '../config/api_config.dart';
+import 'database_service.dart';
 
 class ApiService {
-  static final ApiService _instance = ApiService._internal();
-  factory ApiService() => _instance;
-  ApiService._internal();
+  static String? _token;
+  static bool _isOnline = true;
 
-  String? _token;
-
-  Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('access_token');
-  }
-
-  void setToken(String token) {
+  static void setToken(String token) {
     _token = token;
   }
 
-  Future<bool> isOnline() async {
-    var connectivityResult = await (Connectivity().checkConnectivity());
-    return connectivityResult != ConnectivityResult.none;
+  static Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      };
+
+  static Future<bool> checkOnline() async {
+    try {
+      final r = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/health'))
+          .timeout(const Duration(seconds: 3));
+      _isOnline = r.statusCode == 200;
+    } catch (_) {
+      _isOnline = false;
+    }
+    return _isOnline;
   }
 
-  Map<String, String> _headers() {
-    return {
-      'Content-Type': 'application/json',
-      if (_token != null) 'Authorization': 'Bearer $_token',
-    };
+  static Future<Map<String, dynamic>> get(String path) async {
+    if (!await checkOnline()) {
+      return {'error': 'offline', 'offline': true};
+    }
+    try {
+      final r = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}$path'), headers: _headers)
+          .timeout(ApiConfig.timeout);
+      return jsonDecode(r.body) as Map<String, dynamic>;
+    } catch (e) {
+      return {'error': e.toString()};
+    }
   }
 
-  Future<http.Response> post(String url, Map<String, dynamic> body) async {
-    return await http.post(
-      Uri.parse(url),
-      headers: _headers(),
-      body: jsonEncode(body),
-    );
-  }
+  static Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body, {
+    bool saveOfflineIfFailed = true,
+  }) async {
+    final isOnline = await checkOnline();
 
-  Future<http.Response> get(String url) async {
-    return await http.get(
-      Uri.parse(url),
-      headers: _headers(),
-    );
+    if (!isOnline && saveOfflineIfFailed) {
+      await DatabaseService.saveToSyncQueue(path: path, payload: body);
+      return {'queued': true, 'message': 'Saved offline — will sync later'};
+    }
+
+    try {
+      final r = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}$path'),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(ApiConfig.timeout);
+
+      final data = jsonDecode(r.body) as Map<String, dynamic>;
+
+      if (r.statusCode == 200 || r.statusCode == 201) {
+        return data;
+      } else if (saveOfflineIfFailed) {
+        await DatabaseService.saveToSyncQueue(path: path, payload: body);
+        return {'queued': true, 'original_error': r.statusCode};
+      }
+      return data;
+    } catch (e) {
+      if (saveOfflineIfFailed) {
+        await DatabaseService.saveToSyncQueue(path: path, payload: body);
+        return {'queued': true, 'error': e.toString()};
+      }
+      return {'error': e.toString()};
+    }
   }
 }

@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/screening_provider.dart';
+import 'providers/sync_provider.dart';
 import 'screens/splash_screen.dart';
-import 'services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ApiService().init();
   runApp(const AmblyopiaApp());
 }
 
@@ -18,21 +17,25 @@ class AmblyopiaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuth()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ScreeningProvider()),
+        ChangeNotifierProvider(create: (_) => SyncProvider()),
       ],
       child: MaterialApp(
         title: 'Amblyopia Care',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          primaryColor: const Color(0xFF1565C0),
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF1565C0),
-            primary: const Color(0xFF1565C0),
-            secondary: const Color(0xFF2E7D32),
+            brightness: Brightness.dark,
           ),
+          scaffoldBackgroundColor: const Color(0xFF0A1628),
+          cardColor: const Color(0xFF0D1B2A),
           useMaterial3: true,
-          fontFamily: 'Inter',
+          textTheme: const TextTheme(
+            bodyLarge: TextStyle(color: Colors.white),
+            bodyMedium: TextStyle(color: Color(0xFFB0BEC5)),
+          ),
         ),
         home: const SplashScreen(),
       ),

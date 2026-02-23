@@ -1,38 +1,55 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../config/api_config.dart';
 import 'api_service.dart';
+import 'database_service.dart';
+import '../config/api_config.dart';
 
 class AuthService {
-  final ApiService _api = ApiService();
-
-  Future<Map<String, dynamic>?> login(String phone, String password, String deviceId) async {
-    final response = await _api.post(ApiConfig.nurseLogin, {
-      'phone_number': phone,
+  static Future<Map<String, dynamic>> login({
+    required String phone,
+    required String password,
+    String deviceId = 'device_001',
+  }) async {
+    final body = {
+      'phone_number': '+91$phone',
       'password': password,
       'device_id': deviceId,
-    });
+    };
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('access_token', data['data']['access_token']);
-      await prefs.setString('nurse_id', data['data']['nurse_profile']['id']);
-      _api.setToken(data['data']['access_token']);
-      return data['data'];
+    final res = await ApiService.post(
+      ApiConfig.nurseLogin,
+      body,
+      saveOfflineIfFailed: false,
+    );
+
+    if (res.containsKey('token') || res['data']?['token'] != null) {
+      final token = res['token']?.toString() ??
+          res['data']?['token']?.toString() ?? '';
+      final nurseId = res['nurse_id']?.toString() ??
+          res['data']?['nurse_id']?.toString() ?? '';
+      final nurseName = res['name']?.toString() ??
+          res['data']?['name']?.toString() ?? 'Nurse';
+
+      await DatabaseService.saveToken(token, nurseId, nurseName);
+      ApiService.setToken(token);
+
+      return {'success': true, 'token': token, 'name': nurseName};
     }
-    return null;
+
+    // Try offline cached token
+    final cached = await DatabaseService.getToken();
+    if (cached != null) {
+      ApiService.setToken(cached['token'] as String);
+      return {
+        'success': true,
+        'offline': true,
+        'token': cached['token'],
+        'name': cached['nurse_name'],
+      };
+    }
+
+    return {'success': false, 'error': res['detail'] ?? res['error'] ?? 'Login failed'};
   }
 
-  Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('access_token');
-    await prefs.remove('nurse_id');
-    _api.setToken("");
-  }
-
-  Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.containsKey('access_token');
+  static Future<void> logout() async {
+    await DatabaseService.clearToken();
   }
 }

@@ -1,146 +1,146 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../models/session_model.dart';
+import '../models/gaze_result_model.dart';
+import '../models/snellen_result_model.dart';
+import '../models/redgreen_result_model.dart';
+import '../models/combined_result_model.dart';
 import '../services/api_service.dart';
 import '../services/database_service.dart';
 import '../config/api_config.dart';
-import 'dart:convert';
 
-class ScreeningProvider with ChangeNotifier {
-  final ApiService _api = ApiService();
-  final DatabaseService _db = DatabaseService();
+enum ScreeningStep { notStarted, gaze, snellen, redGreen, complete }
 
-  String? _currentPatientId;
-  String? _currentSessionId;
-  int _currentStep = 0;
-  
-  // Results
-  Map<String, dynamic>? _snellenResult;
-  Map<String, dynamic>? _gazeResult;
-  Map<String, dynamic>? _redGreenResult;
-  Map<String, dynamic>? _finalDiagnosis;
+class ScreeningProvider extends ChangeNotifier {
+  String? sessionId;
+  String? patientId;
+  String? villageId;
+  String ageGroup = 'child';
+  ScreeningStep currentStep = ScreeningStep.notStarted;
 
-  String? get currentPatientId => _currentPatientId;
-  String? get currentSessionId => _currentSessionId;
-  int get currentStep => _currentStep;
-  Map<String, dynamic>? get finalDiagnosis => _finalDiagnosis;
+  GazeResultModel? gazeResult;
+  SnellenResultModel? snellenResult;
+  RedGreenResultModel? redGreenResult;
+  CombinedResultModel? combinedResult;
 
-  void nextStep() {
-    _currentStep++;
+  bool isLoading = false;
+  String? errorMessage;
+  bool isOffline = false;
+
+  Future<bool> startSession({
+    required String ageGroup,
+    required String villageId,
+    required double lat,
+    required double lng,
+  }) async {
+    isLoading = true;
+    this.ageGroup = ageGroup;
+    this.villageId = villageId;
+    notifyListeners();
+
+    final patientRes = await ApiService.post(
+      ApiConfig.createPatient,
+      {'age_group': ageGroup, 'village_id': villageId},
+    );
+
+    patientId = patientRes['data']?['id']?.toString() ??
+        patientRes['id']?.toString() ??
+        _generateLocalId();
+
+    final sessionRes = await ApiService.post(
+      ApiConfig.startSession,
+      {
+        'patient_id': patientId,
+        'village_id': villageId,
+        'device_id': 'device_001',
+        'gps_lat': lat,
+        'gps_lng': lng,
+        'lighting_condition': 'good',
+        'battery_level': 85,
+        'internet_available': !isOffline,
+      },
+    );
+
+    sessionId = sessionRes['data']?['session_id']?.toString() ??
+        sessionRes['session_id']?.toString() ??
+        _generateLocalId();
+
+    await DatabaseService.saveSession({
+      'id': sessionId,
+      'patient_id': patientId,
+      'village_id': villageId,
+      'age_group': ageGroup,
+      'started_at': DateTime.now().toIso8601String(),
+      'synced': sessionRes['queued'] == true ? 0 : 1,
+    });
+
+    currentStep = ScreeningStep.gaze;
+    isLoading = false;
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> saveGazeResult(GazeResultModel result) async {
+    gazeResult = result;
+    final payload = result.toJson();
+    payload['session_id'] = sessionId;
+    await ApiService.post(ApiConfig.gazeResult, payload);
+    await DatabaseService.saveResult(sessionId!, 'gaze', payload);
+    currentStep = ScreeningStep.snellen;
+    notifyListeners();
+  }
+
+  Future<void> saveSnellenResult(SnellenResultModel result) async {
+    snellenResult = result;
+    final payload = result.toJson();
+    payload['session_id'] = sessionId;
+    await ApiService.post(ApiConfig.snellenResult, payload);
+    await DatabaseService.saveResult(sessionId!, 'snellen', payload);
+    currentStep = ScreeningStep.redGreen;
+    notifyListeners();
+  }
+
+  Future<void> saveRedGreenResult(RedGreenResultModel result) async {
+    redGreenResult = result;
+    final payload = result.toJson();
+    payload['session_id'] = sessionId;
+    await ApiService.post(ApiConfig.redgreenResult, payload);
+    await DatabaseService.saveResult(sessionId!, 'redgreen', payload);
+    await _completeScreening();
+  }
+
+  Future<void> _completeScreening() async {
+    isLoading = true;
+    notifyListeners();
+
+    final res = await ApiService.post(
+      ApiConfig.completeScreening,
+      {'session_id': sessionId},
+    );
+
+    if (res['queued'] == true || res['error'] != null) {
+      combinedResult = CombinedResultModel.defaultResult();
+    } else {
+      combinedResult = CombinedResultModel.fromJson(res['data'] ?? res);
+    }
+
+    currentStep = ScreeningStep.complete;
+    isLoading = false;
     notifyListeners();
   }
 
   void reset() {
-    _currentPatientId = null;
-    _currentSessionId = null;
-    _currentStep = 0;
-    _snellenResult = null;
-    _gazeResult = null;
-    _redGreenResult = null;
-    _finalDiagnosis = null;
+    sessionId = null;
+    patientId = null;
+    villageId = null;
+    gazeResult = null;
+    snellenResult = null;
+    redGreenResult = null;
+    combinedResult = null;
+    currentStep = ScreeningStep.notStarted;
+    errorMessage = null;
     notifyListeners();
   }
 
-  Future<bool> createPatient(String ageGroup, String villageId) async {
-    final payload = {'age_group': ageGroup, 'village_id': villageId};
-    if (await _api.isOnline()) {
-      final response = await _api.post(ApiConfig.createPatient, payload);
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        _currentPatientId = data['data']['id'];
-        notifyListeners();
-        return true;
-      }
-    } else {
-      _currentPatientId = "OFFLINE_${DateTime.now().millisecondsSinceEpoch}";
-      await _db.queueRequest(ApiConfig.createPatient, payload);
-      notifyListeners();
-      return true;
-    }
-    return false;
-  }
-
-  Future<bool> startSession(String nurseId, String villageId, double lat, double lng) async {
-    final payload = {
-      'patient_id': _currentPatientId,
-      'nurse_id': nurseId,
-      'village_id': villageId,
-      'device_id': 'MOBILE_APP',
-      'gps_lat': lat,
-      'gps_lng': lng,
-      'lighting_condition': 'good',
-      'battery_level': 85,
-      'internet_available': await _api.isOnline()
-    };
-
-    if (await _api.isOnline()) {
-      final response = await _api.post(ApiConfig.startScreening, payload);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _currentSessionId = data['data']['session_id'];
-        notifyListeners();
-        return true;
-      }
-    } else {
-      _currentSessionId = "OFFLINE_SESS_${DateTime.now().millisecondsSinceEpoch}";
-      await _db.queueRequest(ApiConfig.startScreening, payload);
-      notifyListeners();
-      return true;
-    }
-    return false;
-  }
-
-  Future<void> submitSnellen(Map<String, dynamic> result) async {
-    _snellenResult = result;
-    result['session_id'] = _currentSessionId;
-    if (await _api.isOnline()) {
-      await _api.post(ApiConfig.snellenResult, result);
-    } else {
-      await _db.queueRequest(ApiConfig.snellenResult, result);
-    }
-    notifyListeners();
-  }
-
-  Future<void> submitGaze(Map<String, dynamic> result) async {
-    _gazeResult = result;
-    result['session_id'] = _currentSessionId;
-    if (await _api.isOnline()) {
-      await _api.post(ApiConfig.gazeResult, result);
-    } else {
-      await _db.queueRequest(ApiConfig.gazeResult, result);
-    }
-    notifyListeners();
-  }
-
-  Future<void> submitRedGreen(Map<String, dynamic> result) async {
-    _redGreenResult = result;
-    result['session_id'] = _currentSessionId;
-    if (await _api.isOnline()) {
-      await _api.post(ApiConfig.redGreenResult, result);
-    } else {
-      await _db.queueRequest(ApiConfig.redGreenResult, result);
-    }
-    notifyListeners();
-  }
-
-  Future<bool> completeSession() async {
-    final payload = {'session_id': _currentSessionId};
-    if (await _api.isOnline()) {
-      final response = await _api.post(ApiConfig.completeScreening, payload);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _finalDiagnosis = data['data'];
-        notifyListeners();
-        return true;
-      }
-    } else {
-      await _db.queueRequest(ApiConfig.completeScreening, payload);
-      _finalDiagnosis = {
-        'risk_level': 'Pending Sync',
-        'severity_grade': 0,
-        'recommendation': 'Waiting for server sync...'
-      };
-      notifyListeners();
-      return true;
-    }
-    return false;
-  }
+  String _generateLocalId() =>
+      'local_${DateTime.now().millisecondsSinceEpoch}';
 }
