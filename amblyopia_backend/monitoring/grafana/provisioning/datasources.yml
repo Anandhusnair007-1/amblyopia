@@ -1,0 +1,48 @@
+################################################################################
+# Grafana datasource provisioning — Amblyopia Care System
+################################################################################
+
+apiVersion: 1
+
+datasources:
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    uid: "prometheus-uid"
+    jsonData:
+      httpMethod: POST
+      timeInterval: "15s"
+      # Enable Prometheus query exemplars for trace correlation
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: "tempo-uid"
+    # Mark as editable to allow ad-hoc dashboard exploration
+    editable: true
+
+  # ── Loki (structured logs) ─────────────────────────────────────────────────
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: "loki-uid"
+    jsonData:
+      maxLines: 1000
+    editable: true
+
+  # ── Tempo (distributed tracing — future) ──────────────────────────────────
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: "tempo-uid"
+    jsonData:
+      httpMethod: GET
+      tracesToLogsV2:
+        datasourceUid: "loki-uid"
+        filterByTraceID: true
+        filterBySpanID: false
+    editable: true

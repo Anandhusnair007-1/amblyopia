@@ -1,0 +1,355 @@
+# ================================================================
+#  Amblyopia Care System — CI/CD Pipeline
+#  Triggers: push to main, pull_request targeting main
+#
+#  Jobs:
+#    1. lint          — ruff + flake8
+#    2. test          — pytest + coverage
+#    3. bandit        — Python security scan
+#    4. trivy-deps    — dependency vulnerability scan
+#    5. docker-build  — build hardened image
+#    6. trivy-image   — image vulnerability scan (FAIL on HIGH/CRITICAL)
+#    7. sbom          — generate SBOM (syft) + sign (cosign)
+#    8. push          — push to GHCR (main branch only)
+# ================================================================
+
+name: CI/CD — Amblyopia Care System
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY:   ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/amblyopia-backend
+  PYTHON_VER: "3.10"
+
+permissions:
+  contents:      read
+  packages:      write
+  security-events: write   # for SARIF upload
+  id-token:      write     # for cosign keyless signing
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 1 — Lint
+  # ──────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff + flake8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VER }}
+          cache: pip
+
+      - name: Install linters
+        run: pip install ruff flake8
+
+      - name: ruff check
+        run: ruff check amblyopia_backend/app/ --output-format=github
+
+      - name: flake8 check
+        run: |
+          flake8 amblyopia_backend/app/ \
+            --max-line-length=120 \
+            --extend-ignore=E501,W503 \
+            --format="::error file=%(path)s,line=%(row)d,col=%(col)d::%(text)s"
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 2 — Tests
+  # ──────────────────────────────────────────────────────────────
+  test:
+    name: Pytest + Coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER:     testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB:       amblyopia_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VER }}
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: amblyopia_backend
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio httpx
+
+      - name: Run tests
+        working-directory: amblyopia_backend
+        env:
+          DATABASE_URL:     postgresql+asyncpg://testuser:testpass@localhost:5432/amblyopia_test
+          REDIS_URL:         redis://localhost:6379/0
+          SECRET_KEY:        ci-test-secret-key-32-chars-long-xx
+          ENCRYPTION_KEY:    ${{ secrets.CI_ENCRYPTION_KEY }}
+          ENVIRONMENT:       test
+          MLFLOW_TRACKING_URI: file:///tmp/mlruns
+          MINIO_ACCESS_KEY:  minioaccess
+          MINIO_SECRET_KEY:  miniosecret12345678
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=60 \
+            -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: amblyopia_backend/coverage.xml
+          fail_ci_if_error: false
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 3 — Bandit Security Scan
+  # ──────────────────────────────────────────────────────────────
+  bandit:
+    name: Bandit Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VER }}
+
+      - name: Install bandit
+        run: pip install bandit[toml]
+
+      - name: Run bandit
+        run: |
+          bandit -r amblyopia_backend/app/ \
+            -ll \
+            -f json \
+            -o bandit-report.json \
+            --exclude amblyopia_backend/app/__pycache__ \
+            || true
+
+      - name: Check for HIGH/CRITICAL issues
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          report = json.load(open("bandit-report.json"))
+          issues = [i for i in report.get("results", [])
+                    if i["issue_severity"] in ("HIGH", "CRITICAL")]
+          if issues:
+              for i in issues:
+                  print(f"::error file={i['filename']},line={i['line_number']}::"
+                        f"[BANDIT-{i['test_id']}] {i['issue_text']} (severity={i['issue_severity']})")
+              sys.exit(1)
+          print(f"Bandit: 0 HIGH/CRITICAL issues found ({len(report.get('results',[]))} total)")
+          EOF
+
+      - name: Upload bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 4 — Trivy Dependency Scan
+  # ──────────────────────────────────────────────────────────────
+  trivy-deps:
+    name: Trivy — Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy on requirements.txt
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type:    fs
+          scan-ref:     amblyopia_backend/requirements.txt
+          severity:     HIGH,CRITICAL
+          format:       sarif
+          output:       trivy-deps.sarif
+          exit-code:    "1"
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-deps.sarif
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 5 — Build Docker Image
+  # ──────────────────────────────────────────────────────────────
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [lint, test, bandit, trivy-deps]
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag:    ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build image (no push yet)
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context:   amblyopia_backend
+          file:      amblyopia_backend/docker/Dockerfile
+          push:      false
+          tags:      ${{ steps.meta.outputs.tags }}
+          labels:    ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          outputs:   type=docker,dest=/tmp/image.tar
+
+      - name: Save image tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp/image.tar
+          retention-days: 1
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 6 — Trivy Image Scan (FAIL on HIGH/CRITICAL)
+  # ──────────────────────────────────────────────────────────────
+  trivy-image:
+    name: Trivy — Image Vulnerability Scan
+    runs-on: ubuntu-latest
+    needs: docker-build
+    steps:
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/image.tar
+
+      - name: Run Trivy on image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref:  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format:     sarif
+          output:     trivy-image.sarif
+          severity:   HIGH,CRITICAL
+          exit-code:  "1"
+
+      - name: Upload image scan SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-image.sarif
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 7 — SBOM + Cosign signing
+  # ──────────────────────────────────────────────────────────────
+  sbom-sign:
+    name: SBOM + Image Signing
+    runs-on: ubuntu-latest
+    needs: trivy-image
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/image.tar
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image:          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          artifact-name:  sbom.spdx.json
+          format:         spdx-json
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: amblyopia_backend
+          file:    amblyopia_backend/docker/Dockerfile
+          push:    true
+          tags:    ${{ needs.docker-build.outputs.image-tag }}
+          cache-from: type=gha
+
+      - name: Sign image with cosign (keyless OIDC)
+        run: |
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 8 — Notify on failure
+  # ──────────────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify on Pipeline Failure
+    runs-on: ubuntu-latest
+    needs: [lint, test, bandit, trivy-deps, docker-build, trivy-image]
+    if: failure()
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "Pipeline failed for commit ${{ github.sha }} on branch ${{ github.ref_name }}"
+          # Extend: add Slack/Teams webhook here
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          #   -H 'Content-type: application/json' \
+          #   --data '{"text":"❌ Amblyopia CI failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'

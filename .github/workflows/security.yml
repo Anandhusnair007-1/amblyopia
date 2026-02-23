@@ -1,0 +1,76 @@
+# ================================================================
+#  Scheduled security scans — run nightly independently of CI
+#  Also runs on-demand via workflow_dispatch
+# ================================================================
+
+name: Security Scans (Nightly)
+
+on:
+  schedule:
+    - cron: "0 1 * * *"   # 01:00 UTC every night
+  workflow_dispatch:
+
+permissions:
+  contents:        read
+  security-events: write
+
+jobs:
+  # ── Pip-audit: checks installed packages against OSV/PyPI Advisory DB ──
+  pip-audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install pip-audit
+      - name: Audit requirements
+        run: |
+          pip-audit \
+            -r amblyopia_backend/requirements.txt \
+            --format json \
+            -o pip-audit.json || true
+      - name: Fail on CRITICAL
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          data = json.load(open("pip-audit.json"))
+          critical = [d for dep in data.get("dependencies", [])
+                      for vuln in dep.get("vulns", [])
+                      if any(s in vuln.get("id","") for s in ["CRITICAL","HIGH"])]
+          if critical:
+              for c in critical:
+                  print(f"::error::{c}")
+              sys.exit(1)
+          print("pip-audit: no CRITICAL/HIGH vulns")
+          EOF
+
+  # ── Gitleaks: secret scanning ──────────────────────────────────────────
+  gitleaks:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── CodeQL: static analysis ───────────────────────────────────────────
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:python

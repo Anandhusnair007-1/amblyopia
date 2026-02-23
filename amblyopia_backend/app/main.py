@@ -22,6 +22,7 @@ from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.audit_log import AuditTrailMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.metrics import PrometheusMiddleware, metrics_endpoint
 from app.middleware.exception_handlers import (
     http_exception_handler,
     validation_exception_handler,
@@ -155,6 +156,9 @@ app.add_middleware(RateLimitMiddleware)
 # 5. Helmet-style security headers on every response
 app.add_middleware(SecurityHeadersMiddleware)
 
+# 6. Prometheus metrics — outermost HTTP observer (must be last)
+app.add_middleware(PrometheusMiddleware)
+
 
 # ── Exception Handlers ────────────────────────────────────────────────────────
 
@@ -230,6 +234,12 @@ async def readiness_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics(request: Request):
+    """Prometheus metrics scrape endpoint."""
+    return await metrics_endpoint(request)
 
 
 @app.get("/", tags=["system"])

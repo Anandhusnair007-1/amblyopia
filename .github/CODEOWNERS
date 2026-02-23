@@ -1,0 +1,17 @@
+# CODEOWNERS — Amblyopia Care System
+# All changes to these paths require review from the listed owner(s).
+
+# Backend source
+/amblyopia_backend/app/             @Anandhusnair007-1
+
+# CI/CD and DevSecOps
+/.github/                           @Anandhusnair007-1
+
+# Docker / infra
+/amblyopia_backend/docker/          @Anandhusnair007-1
+
+# Compliance and security docs
+/amblyopia_backend/docs/compliance/ @Anandhusnair007-1
+
+# Flutter app
+/amblyopia_app/                     @Anandhusnair007-1

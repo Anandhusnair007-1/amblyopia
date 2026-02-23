@@ -1,0 +1,129 @@
+################################################################################
+# Prometheus Alerting Rules — Amblyopia Care System
+################################################################################
+
+groups:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  - name: api_health
+    interval: 30s
+    rules:
+
+      - alert: APIDown
+        expr: up{job="amblyopia_backend"} == 0
+        for: 1m
+        labels:   { severity: critical }
+        annotations:
+          summary: "Amblyopia API is DOWN"
+          description: "Instance {{ $labels.instance }} has been unreachable for > 1 minute."
+
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(amblyopia_http_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(amblyopia_http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:   { severity: critical }
+        annotations:
+          summary: "HTTP 5xx error rate > 5%"
+          description: "Current 5xx rate: {{ $value | humanizePercentage }}"
+
+      - alert: HighLatencyP95
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(amblyopia_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2.0
+        for: 3m
+        labels:   { severity: warning }
+        annotations:
+          summary: "API P95 latency > 2 s"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+
+      - alert: TooManyActiveRequests
+        expr: amblyopia_active_requests > 100
+        for: 1m
+        labels:   { severity: warning }
+        annotations:
+          summary: "Active requests spike (> 100)"
+          description: "Current count: {{ $value }}"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  - name: ml_pipelines
+    interval: 60s
+    rules:
+
+      - alert: SlowImagePipeline
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(amblyopia_image_pipeline_seconds_bucket[10m])) by (le)
+          ) > 10.0
+        for: 5m
+        labels:   { severity: warning }
+        annotations:
+          summary: "Image pipeline P95 > 10 s"
+
+      - alert: SlowVoicePipeline
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(amblyopia_voice_pipeline_seconds_bucket[10m])) by (le)
+          ) > 5.0
+        for: 5m
+        labels:   { severity: warning }
+        annotations:
+          summary: "Voice pipeline P95 > 5 s"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  - name: infrastructure
+    interval: 30s
+    rules:
+
+      - alert: HighMemoryUsage
+        expr: >
+          1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 5m
+        labels:   { severity: critical }
+        annotations:
+          summary: "Host memory usage > 90%"
+
+      - alert: HighCPUUsage
+        expr: >
+          1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m])) > 0.90
+        for: 5m
+        labels:   { severity: warning }
+        annotations:
+          summary: "Host CPU usage > 90%"
+
+      - alert: DiskSpaceLow
+        expr: >
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.10
+        for: 5m
+        labels:   { severity: critical }
+        annotations:
+          summary: "Disk space < 10% on /"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:   { severity: critical }
+        annotations:
+          summary: "Redis is DOWN"
+
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:   { severity: critical }
+        annotations:
+          summary: "PostgreSQL exporter unreachable"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  - name: security
+    interval: 60s
+    rules:
+
+      - alert: RateLimitSpike
+        expr: >
+          sum(rate(amblyopia_rate_limit_triggers_total[5m])) by (tier) > 5
+        for: 2m
+        labels:   { severity: warning }
+        annotations:
+          summary: "Rate-limit triggers spiking for tier {{ $labels.tier }}"
+          description: "{{ $value | humanize }} triggers/s — may indicate abuse or misconfiguration."

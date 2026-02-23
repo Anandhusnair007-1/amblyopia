@@ -1,30 +1,94 @@
+################################################################################
+# Prometheus — Amblyopia Care System scrape configuration
+# Compatible with: Prometheus 2.x
+################################################################################
+
 global:
-  scrape_interval: 15s
+  scrape_interval:     15s
   evaluation_interval: 15s
+  scrape_timeout:      10s
+  external_labels:
+    environment: "production"
+    project:     "amblyopia-care"
 
+# ── Alerting ─────────────────────────────────────────────────────────────────
 alerting:
-  alertmanagers: []
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "alertmanager:9093"
 
-rule_files: []
+# ── Rule files ────────────────────────────────────────────────────────────────
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
 
+# ── Scrape configs ─────────────────────────────────────────────────────────────
 scrape_configs:
-  # FastAPI backend — exposes /metrics via prometheus-fastapi-instrumentator
-  - job_name: "amblyopia_api"
-    static_configs:
-      - targets: ["api:8000"]
-    metrics_path: /metrics
 
-  # PostgreSQL — via postgres_exporter
+  # --------------------------------------------------------------------------
+  # 1. Self-monitoring
+  # --------------------------------------------------------------------------
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # --------------------------------------------------------------------------
+  # 2. FastAPI backend (custom Prometheus middleware — /metrics)
+  # --------------------------------------------------------------------------
+  - job_name: "amblyopia_backend"
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["backend:8000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # --------------------------------------------------------------------------
+  # 3. PostgreSQL exporter (prom/postgres-exporter)
+  # --------------------------------------------------------------------------
   - job_name: "postgres"
     static_configs:
       - targets: ["postgres_exporter:9187"]
 
-  # Redis — via redis_exporter
+  # --------------------------------------------------------------------------
+  # 4. Redis exporter (oliver006/redis_exporter)
+  # --------------------------------------------------------------------------
   - job_name: "redis"
     static_configs:
       - targets: ["redis_exporter:9121"]
 
-  # Node exporter — host system metrics
+  # --------------------------------------------------------------------------
+  # 5. Node / host metrics (prom/node-exporter)
+  # --------------------------------------------------------------------------
   - job_name: "node"
     static_configs:
       - targets: ["node_exporter:9100"]
+
+  # --------------------------------------------------------------------------
+  # 6. cAdvisor — container-level CPU/memory/IO
+  # --------------------------------------------------------------------------
+  - job_name: "cadvisor"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    metric_relabel_configs:
+      # Drop per-CPU metrics to reduce cardinality
+      - source_labels: [__name__]
+        regex: "container_cpu_usage_seconds_total"
+        action: drop
+
+  # --------------------------------------------------------------------------
+  # 7. MLflow (built-in /metrics if configured)
+  # --------------------------------------------------------------------------
+  - job_name: "mlflow"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["mlflow:5000"]
+
+  # --------------------------------------------------------------------------
+  # 8. Airflow StatsD exporter
+  # --------------------------------------------------------------------------
+  - job_name: "airflow"
+    static_configs:
+      - targets: ["statsd_exporter:9102"]

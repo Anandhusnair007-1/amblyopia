@@ -1,0 +1,17 @@
+################################################################################
+# Grafana dashboard provisioning — Amblyopia Care System
+################################################################################
+
+apiVersion: 1
+
+providers:
+
+  - name: "Amblyopia Dashboards"
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: true

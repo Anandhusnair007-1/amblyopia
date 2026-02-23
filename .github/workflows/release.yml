@@ -1,0 +1,202 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"    # pre-release: v1.1.0-rc.1
+
+permissions:
+  contents:     write    # create GitHub release
+  packages:     write    # push Docker image to ghcr.io
+  id-token:     write    # cosign keyless OIDC signing
+  attestations: write    # GitHub artifact attestations
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  validate-tag:
+    name: Validate Tag Format
+    runs-on: ubuntu-latest
+    outputs:
+      version:      ${{ steps.parse.outputs.version }}
+      is_prerelease: ${{ steps.parse.outputs.is_prerelease }}
+    steps:
+      - name: Parse version from tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" =~ - ]]; then
+            echo "is_prerelease=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Tag: $TAG | Version: $VERSION"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  run-ci:
+    name: Full CI Gate
+    needs: validate-tag
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-and-sign:
+    name: Build, Sign & Push Release Image
+    runs-on: ubuntu-latest
+    needs: [validate-tag, run-ci]
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push release image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context:    ./amblyopia_backend
+          file:       ./amblyopia_backend/docker/Dockerfile
+          push:       true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/amblyopia-backend:${{ needs.validate-tag.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/amblyopia-backend:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ github.event.created_at }}
+            VERSION=${{ needs.validate-tag.outputs.version }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          labels: |
+            org.opencontainers.image.version=${{ needs.validate-tag.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image (keyless OIDC)
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository_owner }}/amblyopia-backend@${{ steps.build.outputs.digest }}
+
+      - name: Generate SBOM (syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/amblyopia-backend:${{ needs.validate-tag.outputs.version }}
+          artifact-name: sbom-${{ needs.validate-tag.outputs.version }}.spdx.json
+          output-file:   sbom.spdx.json
+
+      - name: Attest SBOM to GitHub
+        uses: actions/attest-sbom@v1
+        with:
+          subject-name:   ghcr.io/${{ github.repository_owner }}/amblyopia-backend
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path:      sbom.spdx.json
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  security-gate:
+    name: Release Security Gate
+    runs-on: ubuntu-latest
+    needs: [validate-tag, build-and-sign]
+    steps:
+      - name: Scan release image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref:    ghcr.io/${{ github.repository_owner }}/amblyopia-backend:${{ needs.validate-tag.outputs.version }}
+          format:       sarif
+          output:       trivy-release.sarif
+          exit-code:    "1"
+          severity:     CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload SARIF to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-release.sarif
+          category:   trivy-release
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  generate-release-notes:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate-tag, build-and-sign, security-gate]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history for changelog generation
+
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          # Extract the section for this version from CHANGELOG.md
+          NOTES=$(python3 - <<'PYEOF'
+          import re, sys
+
+          version = "${{ needs.validate-tag.outputs.version }}"
+          with open("CHANGELOG.md") as f:
+              content = f.read()
+
+          # Match block between this version header and the next
+          pattern = rf"## \[{re.escape(version)}\].*?\n(.*?)(?=\n## \[|\Z)"
+          match = re.search(pattern, content, re.DOTALL)
+          if match:
+              print(match.group(0).strip())
+          else:
+              print(f"Version {version} not found in CHANGELOG.md")
+          PYEOF
+          )
+          # Write to file to handle multiline content
+          echo "$NOTES" > release_notes.md
+          cat release_notes.md
+
+      - name: Download SBOM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-${{ needs.validate-tag.outputs.version }}.spdx.json
+          path: artifacts/
+        continue-on-error: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       "Amblyopia Care System ${{ github.ref_name }}"
+          body_path:  release_notes.md
+          prerelease: ${{ needs.validate-tag.outputs.is_prerelease == 'true' }}
+          files: |
+            artifacts/sbom-${{ needs.validate-tag.outputs.version }}.spdx.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: false   # we use our own changelog
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  notify-release:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [validate-tag, generate-release-notes]
+    if: always()
+    steps:
+      - name: Notify Slack
+        if: ${{ vars.SLACK_WEBHOOK_URL != '' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ needs.generate-release-notes.result }}"
+          COLOR="good"
+          [[ "$STATUS" != "success" ]] && COLOR="danger"
+          curl -sf -X POST "${SLACK_WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "{\"attachments\":[{\"color\":\"${COLOR}\",\"text\":\"[Release] Amblyopia Care System ${{ github.ref_name }} — ${STATUS}\nhttps://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}\"}]}"
