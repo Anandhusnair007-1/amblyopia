@@ -1,0 +1,264 @@
+# ================================================================
+#  Amblyopia Care — Flutter App CI/CD
+#
+#  Jobs:
+#    1. secret-scan   — gitleaks + hardcoded key grep on Dart files
+#    2. analyze       — flutter analyze (static analysis)
+#    3. test          — flutter test + coverage
+#    4. build-apk     — debug APK (all branches)
+#    5. build-release — release APK + sign (tags only)
+#    6. upload        — attach APK to GitHub Release (tags only)
+# ================================================================
+
+name: Flutter CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'amblyopia_app/**'
+      - '.github/workflows/flutter-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'amblyopia_app/**'
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+  security-events: write
+
+env:
+  FLUTTER_VERSION: '3.19.0'
+  JAVA_VERSION:    '17'
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 1 — Secret & Hardcoded Key Scan
+  # ──────────────────────────────────────────────────────────────
+  secret-scan:
+    name: Secret Scan (Dart)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — full history scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Hardcoded credential grep (Dart)
+        run: |
+          echo "Scanning Dart files for hardcoded secrets..."
+          FOUND=0
+          # Patterns: real API keys, bearer tokens, private keys, passwords
+          PATTERNS=(
+            'password\s*=\s*"[^"]+'
+            'api_key\s*=\s*"[^"]+'
+            'secret\s*=\s*"[^"]+'
+            'Bearer\s+[A-Za-z0-9._-]{20,}'
+            'PRIVATE KEY'
+            'aws_access_key_id'
+            'AIza[0-9A-Za-z_-]{35}'
+          )
+          for pattern in "${PATTERNS[@]}"; do
+            matches=$(grep -rn -iE "$pattern" amblyopia_app/lib/ --include="*.dart" 2>/dev/null || true)
+            if [ -n "$matches" ]; then
+              echo "::error::Potential secret found matching '$pattern':"
+              echo "$matches"
+              FOUND=1
+            fi
+          done
+          if [ $FOUND -eq 0 ]; then
+            echo "✅  No hardcoded secrets found in Dart sources"
+          else
+            exit 1
+          fi
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 2 — Flutter Analyze
+  # ──────────────────────────────────────────────────────────────
+  analyze:
+    name: flutter analyze
+    runs-on: ubuntu-latest
+    needs: secret-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Get packages
+        working-directory: amblyopia_app
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: amblyopia_app
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Check formatting
+        working-directory: amblyopia_app
+        run: dart format --output=none --set-exit-if-changed lib/
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 3 — Flutter Test + Coverage
+  # ──────────────────────────────────────────────────────────────
+  test:
+    name: flutter test
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Get packages
+        working-directory: amblyopia_app
+        run: flutter pub get
+
+      - name: Run tests with coverage
+        working-directory: amblyopia_app
+        run: |
+          flutter test --coverage --reporter=github
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: amblyopia_app/coverage/lcov.info
+          flags: flutter
+          fail_ci_if_error: false
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 4 — Build Debug APK
+  # ──────────────────────────────────────────────────────────────
+  build-apk:
+    name: Build APK (debug)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Get packages
+        working-directory: amblyopia_app
+        run: flutter pub get
+
+      - name: Build debug APK
+        working-directory: amblyopia_app
+        run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: amblyopia-debug-${{ github.sha }}
+          path: amblyopia_app/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 5 — Build Release APK + Sign (tags only)
+  # ──────────────────────────────────────────────────────────────
+  build-release:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > amblyopia_app/android/app/keystore.jks
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Get packages
+        working-directory: amblyopia_app
+        run: flutter pub get
+
+      - name: Build release APK (signed)
+        working-directory: amblyopia_app
+        env:
+          KEY_ALIAS:       ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD:    ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD:  ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          flutter build apk --release \
+            --target-platform android-arm64 \
+            --obfuscate \
+            --split-debug-info=build/debug-info
+
+      - name: Calculate APK SHA-256
+        run: |
+          sha256sum amblyopia_app/build/app/outputs/flutter-apk/app-release.apk \
+            | tee amblyopia_app/build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: amblyopia-release-${{ github.ref_name }}
+          path: |
+            amblyopia_app/build/app/outputs/flutter-apk/app-release.apk
+            amblyopia_app/build/app/outputs/flutter-apk/app-release.apk.sha256
+
+  # ──────────────────────────────────────────────────────────────
+  #  JOB 6 — Attach APK to GitHub Release (tags only)
+  # ──────────────────────────────────────────────────────────────
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: amblyopia-release-${{ github.ref_name }}
+          path: dist/
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/app-release.apk
+            dist/app-release.apk.sha256
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
