@@ -3,27 +3,42 @@ import 'api_service.dart';
 import 'database_service.dart';
 
 class SyncService {
-  final ApiService _api = ApiService();
-  final DatabaseService _db = DatabaseService();
+  static Future<SyncResult> syncAll() async {
+    final pending = await DatabaseService.getPendingSync();
+    int success = 0;
+    int failed = 0;
 
-  Future<void> syncOfflineData() async {
-    if (!await _api.isOnline()) return;
-
-    final queue = await _db.getQueue();
-    for (var item in queue) {
+    for (final item in pending) {
       try {
-        final response = await _api.post(
-          item['endpoint'],
-          jsonDecode(item['payload']),
-        );
+        final payload = jsonDecode(item['payload'] as String) as Map<String, dynamic>;
+        final path = item['api_path'] as String;
+        final id = item['id'] as int;
 
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          await _db.removeFromQueue(item['id']);
+        final res = await ApiService.post(path, payload, saveOfflineIfFailed: false);
+
+        if (res['error'] == null && res['queued'] != true) {
+          await DatabaseService.markSynced(id);
+          success++;
+        } else {
+          failed++;
         }
-      } catch (e) {
-        // Log error and continue to next item
-        print("Sync failed for ${item['id']}: $e");
+      } catch (_) {
+        failed++;
       }
     }
+
+    return SyncResult(success: success, failed: failed, total: pending.length);
   }
+}
+
+class SyncResult {
+  final int success;
+  final int failed;
+  final int total;
+
+  const SyncResult({
+    required this.success,
+    required this.failed,
+    required this.total,
+  });
 }

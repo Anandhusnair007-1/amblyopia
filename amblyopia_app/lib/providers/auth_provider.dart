@@ -1,41 +1,56 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../services/auth_service.dart';
+import '../services/database_service.dart';
+import '../services/api_service.dart';
 
-class AuthProvider with ChangeNotifier {
-  final AuthService _authService = AuthService();
-  bool _isAuthenticated = false;
-  Map<String, dynamic>? _nurseProfile;
-  bool _isLoading = false;
+class AuthProvider extends ChangeNotifier {
+  bool isLoggedIn = false;
+  bool isLoading = false;
+  String nurseName = '';
+  String nurseId = '';
+  String? errorMessage;
 
-  bool get isAuthenticated => _isAuthenticated;
-  Map<String, dynamic>? get nurseProfile => _nurseProfile;
-  bool get isLoading => _isLoading;
-
-  Future<void> checkAuth() async {
-    _isAuthenticated = await _authService.isLoggedIn();
-    notifyListeners();
+  Future<void> checkLogin() async {
+    final auth = await DatabaseService.getToken();
+    if (auth != null) {
+      ApiService.setToken(auth['token'] as String);
+      nurseName = auth['nurse_name']?.toString() ?? 'Nurse';
+      nurseId = auth['nurse_id']?.toString() ?? '';
+      isLoggedIn = true;
+      notifyListeners();
+    }
   }
 
-  Future<bool> login(String phone, String password, String deviceId) async {
-    _isLoading = true;
+  Future<bool> login(String phone, String password) async {
+    isLoading = true;
+    errorMessage = null;
     notifyListeners();
 
-    final result = await _authService.login(phone, password, deviceId);
-    _isLoading = false;
+    final res = await AuthService.login(
+      phone: phone,
+      password: password,
+    );
 
-    if (result != null) {
-      _isAuthenticated = true;
-      _nurseProfile = result['nurse_profile'];
+    isLoading = false;
+
+    if (res['success'] == true) {
+      nurseName = res['name']?.toString() ?? 'Nurse';
+      isLoggedIn = true;
+      errorMessage = null;
       notifyListeners();
       return true;
+    } else {
+      errorMessage = res['error']?.toString() ?? 'Login failed';
+      notifyListeners();
+      return false;
     }
-    return false;
   }
 
   Future<void> logout() async {
-    await _authService.logout();
-    _isAuthenticated = false;
-    _nurseProfile = null;
+    await AuthService.logout();
+    isLoggedIn = false;
+    nurseName = '';
+    nurseId = '';
     notifyListeners();
   }
 }
