@@ -35,7 +35,7 @@ dependencies:
   # Utilities
   uuid: ^4.2.1
   geolocator: ^10.1.0
-  intl: ^0.18.1
+  intl: ^0.20.2
 
   # Charts (for result display)
   fl_chart: ^0.65.0
