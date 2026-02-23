@@ -8,7 +8,7 @@ fastapi==0.115.8
 uvicorn[standard]==0.34.0
 starlette==0.45.3
 python-multipart==0.0.6
-httpx==0.25.2
+httpx==0.28.1
 aiofiles==23.2.1
 
 # ── Database ──────────────────────────────────────────────────────────────────
