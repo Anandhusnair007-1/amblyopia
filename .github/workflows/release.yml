@@ -64,7 +64,7 @@ jobs:
 
       - name: Build & push release image
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context:    ./amblyopia_backend
           file:       ./amblyopia_backend/docker/Dockerfile
