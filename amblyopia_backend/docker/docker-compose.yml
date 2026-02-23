@@ -1,0 +1,167 @@
+version: "3.9"
+
+services:
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: amblyopia_api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://amblyopia:${POSTGRES_PASSWORD}@db:5432/amblyopia_db"
+      REDIS_URL: "redis://redis:6379/0"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY}"
+      MINIO_SECRET_KEY: "${MINIO_SECRET_KEY}"
+      MINIO_BUCKET: "amblyopia"
+      MINIO_SECURE: "false"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+      MLFLOW_EXPERIMENT_NAME: "amblyopia_screening"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+      SECRET_KEY: "${SECRET_KEY}"
+      JWT_ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+      REFRESH_TOKEN_EXPIRE_DAYS: "7"
+      ENVIRONMENT: "development"
+      DEBUG: "true"
+      HOSPITAL_NAME: "Aravind Eye Hospital"
+      HOSPITAL_DOMAIN: "aravind.org"
+      MODEL_CONFIDENCE_THRESHOLD: "0.90"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ../:/app
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: amblyopia_db
+    environment:
+      POSTGRES_USER: amblyopia
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: amblyopia_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - amblyopia_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amblyopia -d amblyopia_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: amblyopia_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+
+  # ── MinIO (S3-compatible) ────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-01-01T00-00-01Z
+    container_name: amblyopia_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ACCESS_KEY}"
+      MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ── MLflow Tracking ──────────────────────────────────────────────────────────
+  mlflow:
+    image: python:3.11-slim
+    container_name: amblyopia_mlflow
+    command: >
+      sh -c "pip install mlflow psycopg2-binary -q &&
+             mlflow server
+               --host 0.0.0.0
+               --port 5000
+               --backend-store-uri postgresql://amblyopia:${POSTGRES_PASSWORD}@db:5432/amblyopia_db
+               --default-artifact-root s3://amblyopia/mlflow"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: "${MINIO_ACCESS_KEY}"
+      AWS_SECRET_ACCESS_KEY: "${MINIO_SECRET_KEY}"
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - minio
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+
+  # ── Airflow ──────────────────────────────────────────────────────────────────
+  airflow:
+    image: apache/airflow:2.8.1-python3.11
+    container_name: amblyopia_airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://amblyopia:${POSTGRES_PASSWORD}@db:5432/amblyopia_db"
+      AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW_FERNET_KEY}"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      DATABASE_URL: "postgresql+asyncpg://amblyopia:${POSTGRES_PASSWORD}@db:5432/amblyopia_db"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY}"
+      MINIO_SECRET_KEY: "${MINIO_SECRET_KEY}"
+      MINIO_BUCKET: "amblyopia"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+    command: >
+      bash -c "airflow db init &&
+               airflow users create --username admin --password admin --firstname Admin --lastname Admin --role Admin --email admin@aravind.org &&
+               airflow scheduler &
+               airflow webserver"
+
+# ── Volumes & Networks ────────────────────────────────────────────────────────
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  amblyopia_net:
+    driver: bridge

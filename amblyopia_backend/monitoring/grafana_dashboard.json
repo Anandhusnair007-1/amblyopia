@@ -1,0 +1,231 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "gauge", "name": "Gauge", "version": "" },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": { "list": [] },
+  "description": "Amblyopia Care System — Production Operations Dashboard",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total API Requests (5m)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "increase(http_requests_total[5m])",
+          "legendFormat": "Requests"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "API Error Rate",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{status_code=~\"5..\"}[5m]) / rate(http_requests_total[5m]) * 100",
+          "legendFormat": "Error %"
+        }
+      ],
+      "options": { "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Screenings Today",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "amblyopia_screenings_completed_total",
+          "legendFormat": "Sessions"
+        }
+      ],
+      "options": { "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "color": "blue", "value": null }] }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Grade 3 Referrals (urgent)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "amblyopia_grade3_referrals_total",
+          "legendFormat": "Grade 3"
+        }
+      ],
+      "options": { "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "API Latency P95 (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, handler)) * 1000",
+          "legendFormat": "{{handler}} P95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, handler)) * 1000",
+          "legendFormat": "{{handler}} P50"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 6,
+      "title": "PostgreSQL Connections",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "pg_stat_database_numbackends{datname=\"amblyopia_db\"}",
+          "legendFormat": "Active connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Redis Memory Usage",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 12 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes / redis_memory_max_bytes * 100",
+          "legendFormat": "Used %"
+        }
+      ],
+      "options": { "minValue": 0, "maxValue": 100 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Severity Grade Distribution",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 12 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "amblyopia_severity_grade_total{grade=\"0\"}",
+          "legendFormat": "Grade 0 (Normal)"
+        },
+        {
+          "expr": "amblyopia_severity_grade_total{grade=\"1\"}",
+          "legendFormat": "Grade 1 (Mild)"
+        },
+        {
+          "expr": "amblyopia_severity_grade_total{grade=\"2\"}",
+          "legendFormat": "Grade 2 (Moderate)"
+        },
+        {
+          "expr": "amblyopia_severity_grade_total{grade=\"3\"}",
+          "legendFormat": "Grade 3 (Severe)"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["amblyopia", "medical", "aravind"],
+  "title": "Amblyopia Care System",
+  "uid": "amblyopia-ops-v1",
+  "version": 1
+}

@@ -1,0 +1,160 @@
+# ================================================================
+#  Amblyopia Care System — .gitignore
+#  DevSecOps hardened: secrets, model weights, build artefacts
+#  and runtime data are all excluded.
+# ================================================================
+
+
+# ── SECRETS & CREDENTIALS (NEVER commit) ──────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/
+service_account*.json
+*_sa.json
+
+
+# ── PYTHON ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+*.cover
+.coverage
+htmlcov/
+.tox/
+venv/
+.venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+
+
+# ── ML MODEL WEIGHTS & LARGE BINARIES ─────────────────────────
+# (Model artefacts should be stored in MLflow / object storage)
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.onnx
+*.pkl
+*.pickle
+*.pb
+*.tflite
+*.bin
+*.weights
+*.safetensors
+*.npz
+
+# Model dirs (downloaded at runtime)
+amblyopia_backend/models/
+amblyopia_backend/integrations/Real-ESRGAN/
+amblyopia_backend/integrations/Zero-DCE/
+amblyopia_backend/integrations/rnnoise/
+amblyopia_backend/ml/*.tflite
+amblyopia_backend/ml/*.pt
+
+
+# ── MLFLOW ─────────────────────────────────────────────────────
+amblyopia_backend/mlruns/
+mlruns/
+mlartifacts/
+
+
+# ── RUNTIME LOGS & REPORTS ─────────────────────────────────────
+amblyopia_backend/logs/
+logs/
+*.log
+*.pid
+
+
+# ── ALEMBIC RUNTIME ────────────────────────────────────────────
+# Keep migrations/versions source; ignore compiled cache
+amblyopia_backend/migrations/versions/__pycache__/
+
+
+# ── DOCKER ─────────────────────────────────────────────────────
+# Keep Dockerfiles; ignore local override files
+docker-compose.override.yml
+.docker/
+
+
+# ── TEST ASSETS (potentially PHI / patient data) ───────────────
+amblyopia_backend/test_assets/
+amblyopia_backend/validation_data/
+
+
+# ── AIRFLOW ────────────────────────────────────────────────────
+amblyopia_backend/airflow/logs/
+amblyopia_backend/airflow/plugins/__pycache__/
+
+
+# ── FLUTTER / DART ─────────────────────────────────────────────
+amblyopia_app/.dart_tool/
+amblyopia_app/.flutter-plugins
+amblyopia_app/.flutter-plugins-dependencies
+amblyopia_app/.packages
+amblyopia_app/build/
+amblyopia_app/pubspec.lock
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+
+# ── ANDROID ────────────────────────────────────────────────────
+amblyopia_app/android/local.properties
+amblyopia_app/android/.gradle/
+amblyopia_app/android/app/debug/
+amblyopia_app/android/app/release/
+amblyopia_app/android/app/profile/
+*.jks
+*.keystore
+google-services.json
+
+
+# ── iOS / macOS ────────────────────────────────────────────────
+amblyopia_app/ios/Pods/
+amblyopia_app/ios/.symlinks/
+amblyopia_app/ios/Flutter/Generated.xcconfig
+amblyopia_app/ios/Flutter/flutter_export_environment.sh
+amblyopia_app/ios/Runner.xcworkspace/contents.xcworkspacedata
+amblyopia_app/macos/Pods/
+amblyopia_app/macos/.symlinks/
+GoogleService-Info.plist
+
+
+# ── OS / EDITOR ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+*~
+
+
+# ── MISC ───────────────────────────────────────────────────────
+*.tmp
+*.bak
+*.orig
+node_modules/
+*.sqlite
+*.db

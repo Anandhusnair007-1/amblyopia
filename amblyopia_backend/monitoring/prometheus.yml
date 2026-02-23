@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers: []
+
+rule_files: []
+
+scrape_configs:
+  # FastAPI backend — exposes /metrics via prometheus-fastapi-instrumentator
+  - job_name: "amblyopia_api"
+    static_configs:
+      - targets: ["api:8000"]
+    metrics_path: /metrics
+
+  # PostgreSQL — via postgres_exporter
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres_exporter:9187"]
+
+  # Redis — via redis_exporter
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis_exporter:9121"]
+
+  # Node exporter — host system metrics
+  - job_name: "node"
+    static_configs:
+      - targets: ["node_exporter:9100"]

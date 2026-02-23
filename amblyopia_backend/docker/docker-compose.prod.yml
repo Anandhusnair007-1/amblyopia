@@ -1,0 +1,197 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Amblyopia Care System — PRODUCTION docker-compose
+# Usage:
+#   docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-common-env: &common-env
+  DATABASE_URL:            "${DATABASE_URL}"
+  REDIS_URL:               "${REDIS_URL}"
+  MINIO_ENDPOINT:          "${MINIO_ENDPOINT}"
+  MINIO_ACCESS_KEY:        "${MINIO_ACCESS_KEY}"
+  MINIO_SECRET_KEY:        "${MINIO_SECRET_KEY}"
+  MINIO_BUCKET:            "${MINIO_BUCKET:-amblyopia}"
+  MINIO_SECURE:            "${MINIO_SECURE:-true}"
+  MLFLOW_TRACKING_URI:     "${MLFLOW_TRACKING_URI}"
+  MLFLOW_EXPERIMENT_NAME:  "${MLFLOW_EXPERIMENT_NAME:-amblyopia_screening}"
+  MLFLOW_MODEL_NAME:       "${MLFLOW_MODEL_NAME:-amblyopia_classifier}"
+  ENCRYPTION_KEY:          "${ENCRYPTION_KEY}"
+  JWT_SECRET_KEY:          "${JWT_SECRET_KEY}"
+  JWT_ALGORITHM:           "HS256"
+  ACCESS_TOKEN_EXPIRE_MINUTES:  "15"
+  REFRESH_TOKEN_EXPIRE_DAYS:    "7"
+  ENVIRONMENT:             "production"
+  DEBUG:                   "false"
+  LOG_JSON:                "true"
+  HOSPITAL_NAME:           "${HOSPITAL_NAME}"
+  HOSPITAL_DOMAIN:         "${HOSPITAL_DOMAIN}"
+  TWILIO_ACCOUNT_SID:      "${TWILIO_ACCOUNT_SID}"
+  TWILIO_AUTH_TOKEN:       "${TWILIO_AUTH_TOKEN}"
+  TWILIO_ADMIN_WHATSAPP:   "${TWILIO_ADMIN_WHATSAPP}"
+  TWILIO_WHATSAPP_NUMBER:  "${TWILIO_WHATSAPP_NUMBER}"
+
+services:
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: amblyopia-api:${VERSION:-latest}
+    container_name: amblyopia_api
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+      WEB_CONCURRENCY: "${WEB_CONCURRENCY:-4}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ../models:/app/models:ro          # ML models — read-only at runtime
+      - ../integrations:/app/integrations:ro
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: amblyopia_db
+    environment:
+      POSTGRES_USER:     "${POSTGRES_USER:-amblyopia}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB:       "${POSTGRES_DB:-amblyopia_db}"
+      # Tune PostgreSQL for production loads
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    command: >
+      postgres
+      -c max_connections=100
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=16MB
+      -c maintenance_work_mem=128MB
+      -c wal_level=replica
+      -c log_statement=ddl
+      -c log_min_duration_statement=1000
+    ports:
+      - "127.0.0.1:5432:5432"            # localhost-only in prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - amblyopia_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-amblyopia} -d ${POSTGRES_DB:-amblyopia_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: amblyopia_redis
+    command: >
+      redis-server
+      --requirepass "${REDIS_PASSWORD}"
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── MinIO (object store for model artefacts) ──────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-07-04T14-25-45Z
+    container_name: amblyopia_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     "${MINIO_ACCESS_KEY}"
+      MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"
+      MINIO_SITE_REGION:   "ap-south-1"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - amblyopia_net
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ── MLflow tracking server ────────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.1
+    container_name: amblyopia_mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql+psycopg2://${POSTGRES_USER:-amblyopia}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-amblyopia_db}
+      --artifacts-destination s3://${MINIO_BUCKET:-amblyopia}
+      --serve-artifacts
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID:      "${MINIO_ACCESS_KEY}"
+      AWS_SECRET_ACCESS_KEY:  "${MINIO_SECRET_KEY}"
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - amblyopia_net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  amblyopia_net:
+    driver: bridge

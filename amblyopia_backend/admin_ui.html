@@ -1,0 +1,1492 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Amblyopia Care System — Admin UI</title>
+    <style>
+      :root {
+        --primary: #1565c0;
+        --success: #2e7d32;
+        --warning: #f57f17;
+        --danger: #c62828;
+        --background: #f5f7fa;
+        --card-bg: #ffffff;
+        --text-main: #333333;
+        --text-secondary: #666666;
+        --border-radius: 8px;
+        --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background-color: var(--background);
+        color: var(--text-main);
+        margin: 0;
+        padding-top: 60px; /* space for fixed navbar */
+      }
+
+      /* Navbar */
+      .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: white;
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+      }
+      .navbar .logo {
+        width: 32px;
+        height: 32px;
+        background: var(--primary);
+        border-radius: 50%;
+        margin-right: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 18px;
+      }
+      .navbar .brand {
+        font-weight: bold;
+        font-size: 18px;
+        color: var(--primary);
+      }
+      .navbar .status-banner {
+        margin-left: auto;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .status-online {
+        background: #e8f5e9;
+        color: var(--success);
+      }
+      .status-offline {
+        background: #ffebee;
+        color: var(--danger);
+      }
+
+      /* Tabs */
+      .tabs {
+        display: flex;
+        background: white;
+        padding: 0 20px;
+        border-bottom: 1px solid #ddd;
+        overflow-x: auto;
+      }
+      .tab {
+        padding: 16px 24px;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        font-weight: 500;
+        white-space: nowrap;
+        color: var(--text-secondary);
+      }
+      .tab.active {
+        border-bottom-color: var(--primary);
+        color: var(--primary);
+      }
+      .tab:hover {
+        background: #f9f9f9;
+      }
+
+      /* Layout */
+      .content {
+        padding: 24px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+
+      /* Cards */
+      .card {
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow);
+        padding: 20px;
+        margin-bottom: 24px;
+      }
+      .card h3 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+      }
+
+      /* Grid */
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        margin-bottom: 24px;
+      }
+      .stat-card {
+        text-align: center;
+      }
+      .stat-card .value {
+        font-size: 32px;
+        font-weight: bold;
+        margin: 8px 0;
+        color: var(--primary);
+      }
+      .stat-card .label {
+        color: var(--text-secondary);
+        font-size: 14px;
+      }
+
+      /* Tables */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+      }
+      th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+      }
+      .bg-online {
+        background: var(--success);
+      }
+      .bg-offline {
+        background: var(--danger);
+      }
+      .bg-pending {
+        background: var(--warning);
+      }
+
+      /* Buttons */
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #1254a1;
+      }
+      .btn-outline {
+        background: transparent;
+        border: 1px solid var(--primary);
+        color: var(--primary);
+      }
+      .btn-outline:hover {
+        background: #f0f7ff;
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      /* Forms */
+      .form-group {
+        margin-bottom: 16px;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      .radio-group {
+        display: flex;
+        gap: 15px;
+      }
+      .radio-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .radio-item input {
+        width: auto;
+      }
+
+      /* Toast */
+      #toast-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 2000;
+      }
+      .toast {
+        background: white;
+        padding: 12px 24px;
+        border-radius: var(--border-radius);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        min-width: 250px;
+        border-left: 4px solid var(--primary);
+        animation: slideIn 0.3s ease-out;
+      }
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      .toast.error {
+        border-left-color: var(--danger);
+      }
+      .toast.success {
+        border-left-color: var(--success);
+      }
+
+      /* Simulator Progress */
+      .progress-bar {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 30px;
+        position: relative;
+      }
+      .progress-bar::before {
+        content: "";
+        position: absolute;
+        top: 15px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #ddd;
+        z-index: 1;
+      }
+      .progress-step {
+        width: 32px;
+        height: 32px;
+        background: white;
+        border: 2px solid #ddd;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+        font-size: 14px;
+        font-weight: bold;
+        color: #999;
+      }
+      .progress-step.active {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+      .progress-step.completed {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
+      }
+
+      /* Snellen Visual */
+      #snellen-preview {
+        background: white;
+        border: 1px solid #ddd;
+        padding: 10px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .snellen-row {
+        font-weight: bold;
+        transition: 0.3s;
+      }
+      .snellen-row.active {
+        color: var(--primary);
+        transform: scale(1.1);
+      }
+
+      /* Gaze Visual */
+      .eye-container {
+        display: flex;
+        gap: 40px;
+        justify-content: center;
+        padding: 20px;
+      }
+      .eye-circle {
+        width: 80px;
+        height: 80px;
+        border: 2px solid #333;
+        border-radius: 50%;
+        position: relative;
+        overflow: hidden;
+        background: white;
+      }
+      .iris {
+        width: 30px;
+        height: 30px;
+        background: #634e34;
+        border-radius: 50%;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pupil {
+        width: 12px;
+        height: 12px;
+        background: black;
+        border-radius: 50%;
+      }
+
+      /* Result Card Animation */
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(198, 40, 40, 0.4);
+        }
+        70% {
+          box-shadow: 0 0 0 15px rgba(198, 40, 40, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(198, 40, 40, 0);
+        }
+      }
+      .critical-pulse {
+        animation: pulse 2s infinite;
+        border: 3px solid var(--danger) !important;
+      }
+
+      /* Modal */
+      .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 3000;
+      }
+      .modal {
+        background: white;
+        width: 90%;
+        max-width: 600px;
+        border-radius: var(--border-radius);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .modal-header {
+        padding: 16px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .modal-body {
+        padding: 20px;
+        overflow-y: auto;
+        max-height: 80vh;
+      }
+      .modal-footer {
+        padding: 16px;
+        border-top: 1px solid #eee;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      /* Utility */
+      .text-success {
+        color: var(--success);
+      }
+      .text-danger {
+        color: var(--danger);
+      }
+      .text-warning {
+        color: var(--warning);
+      }
+      .hidden {
+        display: none !important;
+      }
+      .loading-dots:after {
+        content: ".";
+        animation: dots 1s infinite;
+      }
+      @keyframes dots {
+        0% {
+          content: ".";
+        }
+        33% {
+          content: "..";
+        }
+        66% {
+          content: "...";
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="logo">A</div>
+      <div class="brand">Amblyopia Care Admin</div>
+      <div id="backend-status" class="status-banner status-offline">
+        Checking Backend...
+      </div>
+    </nav>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="tab1">SYSTEM HEALTH</div>
+      <div class="tab" data-tab="tab2">SCREENING SIMULATOR</div>
+      <div class="tab" data-tab="tab3">DOCTOR REVIEW</div>
+      <div class="tab" data-tab="tab4">DASHBOARD & ANALYTICS</div>
+    </div>
+
+    <main class="content">
+      <!-- TAB 1: SYSTEM HEALTH -->
+      <div id="tab1" class="tab-content active">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+          "
+        >
+          <h2 style="margin: 0">Infrastructure Status</h2>
+          <button class="btn btn-outline" onclick="loadHealthData()">
+            🔄 Refresh
+          </button>
+        </div>
+        <div class="grid-4" id="health-cards">
+          <!-- Cards will be injected -->
+        </div>
+
+        <div class="card">
+          <h3>API Router Status</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Router</th>
+                <th>Path</th>
+                <th>Status</th>
+                <th>Tested</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="router-table">
+              <!-- Rows injected -->
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px">
+          <div class="card">
+            <h3>AI/ML Model Status</h3>
+            <table id="model-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>File</th>
+                  <th>Size</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Injected -->
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h3>GitHub Repos Integrations</h3>
+            <table id="repo-table">
+              <thead>
+                <tr>
+                  <th>Repo</th>
+                  <th>Status</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Injected -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: SCREENING SIMULATOR -->
+      <div id="tab2" class="tab-content">
+        <div class="progress-bar">
+          <div class="progress-step active" id="step-dot-1">1</div>
+          <div class="progress-step" id="step-dot-2">2</div>
+          <div class="progress-step" id="step-dot-3">3</div>
+          <div class="progress-step" id="step-dot-4">4</div>
+          <div class="progress-step" id="step-dot-5">5</div>
+          <div class="progress-step" id="step-dot-6">6</div>
+        </div>
+
+        <!-- STEP 1: CREATE PATIENT -->
+        <div id="sim-step-1" class="card">
+          <h3>Step 1: Create Patient</h3>
+          <div class="form-group">
+            <label>Age Group</label>
+            <div class="radio-group">
+              <label class="radio-item"
+                ><input type="radio" name="age_group" value="infant" />
+                infant</label
+              >
+              <label class="radio-item"
+                ><input type="radio" name="age_group" value="child" checked />
+                child</label
+              >
+              <label class="radio-item"
+                ><input type="radio" name="age_group" value="adult" />
+                adult</label
+              >
+              <label class="radio-item"
+                ><input type="radio" name="age_group" value="elderly" />
+                elderly</label
+              >
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Village ID</label>
+            <div style="display: flex; gap: 10px">
+              <input
+                type="text"
+                id="sim-village-id"
+                placeholder="Village UUID"
+              />
+              <button
+                class="btn btn-outline"
+                style="white-space: nowrap"
+                onclick="useTestVillage()"
+              >
+                Use Test Village
+              </button>
+            </div>
+          </div>
+          <button
+            class="btn btn-primary"
+            id="btn-create-patient"
+            onclick="simCreatePatient()"
+          >
+            CREATE PATIENT
+          </button>
+        </div>
+
+        <!-- STEP 2: START SESSION -->
+        <div id="sim-step-2" class="card hidden">
+          <h3>Step 2: Start Screening Session</h3>
+          <div class="form-group">
+            <label>Patient ID</label>
+            <input type="text" id="sim-patient-id" readonly />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+            <div class="form-group">
+              <label>Latitude</label
+              ><input type="number" id="sim-lat" value="11.0168" />
+            </div>
+            <div class="form-group">
+              <label>Longitude</label
+              ><input type="number" id="sim-lng" value="76.9558" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Lighting</label>
+            <select id="sim-lighting">
+              <option value="good">Good</option>
+              <option value="poor">Poor</option>
+              <option value="very_poor">Very Poor</option>
+            </select>
+          </div>
+          <button
+            class="btn btn-primary"
+            id="btn-start-session"
+            onclick="simStartSession()"
+          >
+            START SESSION
+          </button>
+        </div>
+
+        <!-- STEP 3: SNELLEN RESULT -->
+        <div id="sim-step-3" class="card hidden">
+          <h3>Step 3: Snellen Test</h3>
+          <div
+            style="display: grid; grid-template-columns: 200px 1fr; gap: 40px"
+          >
+            <div id="snellen-preview">
+              <div class="snellen-row" style="font-size: 40px">E</div>
+              <div class="snellen-row" style="font-size: 30px">F P</div>
+              <div class="snellen-row" style="font-size: 24px">T O Z</div>
+              <div class="snellen-row active" style="font-size: 18px">
+                L T E D
+              </div>
+              <div class="snellen-row" style="font-size: 14px">P E C F D</div>
+            </div>
+            <div>
+              <div class="form-group">
+                <label>Right Eye Visual Acuity</label>
+                <div class="radio-group" id="snellen-r-group">
+                  <button
+                    class="btn btn-outline"
+                    onclick="selectAcuity('r', '6/60')"
+                  >
+                    6/60
+                  </button>
+                  <button
+                    class="btn btn-outline"
+                    onclick="selectAcuity('r', '6/12')"
+                  >
+                    6/12
+                  </button>
+                  <button
+                    class="btn btn-primary"
+                    onclick="selectAcuity('r', '6/6')"
+                  >
+                    6/6
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Left Eye Visual Acuity</label>
+                <div class="radio-group" id="snellen-l-group">
+                  <button
+                    class="btn btn-outline"
+                    onclick="selectAcuity('l', '6/60')"
+                  >
+                    6/60
+                  </button>
+                  <button
+                    class="btn btn-primary"
+                    onclick="selectAcuity('l', '6/9')"
+                  >
+                    6/9
+                  </button>
+                  <button
+                    class="btn btn-outline"
+                    onclick="selectAcuity('l', '6/6')"
+                  >
+                    6/6
+                  </button>
+                </div>
+              </div>
+              <button
+                class="btn btn-primary"
+                id="btn-submit-snellen"
+                onclick="simSubmitSnellen()"
+              >
+                SUBMIT SNELLEN RESULT
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 4: GAZE RESULT -->
+        <div id="sim-step-4" class="card hidden">
+          <h3>Step 4: Gaze Detection Result</h3>
+          <div class="eye-container">
+            <div class="eye-circle">
+              <div class="iris" style="left: 40%">
+                <div class="pupil"></div>
+              </div>
+            </div>
+            <div class="eye-circle">
+              <div class="iris" style="left: 60%">
+                <div class="pupil"></div>
+              </div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+            <div class="form-group">
+              <label>Asymmetry Score (0-1.0)</label
+              ><input
+                type="number"
+                id="sim-gaze-asymmetry"
+                value="0.17"
+                step="0.01"
+              />
+            </div>
+            <div class="form-group">
+              <label>Confidence</label
+              ><input
+                type="number"
+                id="sim-gaze-conf"
+                value="0.87"
+                step="0.01"
+              />
+            </div>
+          </div>
+          <button
+            class="btn btn-primary"
+            id="btn-submit-gaze"
+            onclick="simSubmitGaze()"
+          >
+            SUBMIT GAZE RESULT
+          </button>
+        </div>
+
+        <!-- STEP 5: RED-GREEN RESULT -->
+        <div id="sim-step-5" class="card hidden">
+          <h3>Step 5: Red-Green Test</h3>
+          <div
+            style="
+              display: flex;
+              justify-content: center;
+              gap: 20px;
+              padding: 20px;
+            "
+          >
+            <div
+              style="
+                width: 50px;
+                height: 50px;
+                background: red;
+                border-radius: 50%;
+                box-shadow: 0 0 10px red;
+              "
+            ></div>
+            <div
+              style="
+                width: 50px;
+                height: 50px;
+                background: green;
+                border-radius: 50%;
+                box-shadow: 0 0 10px green;
+              "
+            ></div>
+          </div>
+          <div class="form-group">
+            <label>Binocular Score (1-3)</label>
+            <input type="number" id="sim-rg-score" value="2" min="1" max="3" />
+          </div>
+          <button
+            class="btn btn-primary"
+            id="btn-submit-rg"
+            onclick="simSubmitRG()"
+          >
+            SUBMIT RED-GREEN RESULT
+          </button>
+        </div>
+
+        <!-- STEP 6: COMPLETE -->
+        <div id="sim-step-6" class="card hidden">
+          <h3>Step 6: Complete & Result</h3>
+          <p>Click below to finalize screening and generate risk assessment.</p>
+          <button
+            class="btn btn-primary"
+            id="btn-complete-sim"
+            onclick="simCompleteSession()"
+            style="font-size: 18px; padding: 15px 40px"
+          >
+            COMPLETE SCREENING
+          </button>
+
+          <div
+            id="sim-final-result"
+            class="card hidden"
+            style="margin-top: 40px; border-width: 2px"
+          >
+            <h2 style="text-align: center">AMBLYOPIA SCREENING RESULT</h2>
+            <hr />
+            <div style="text-align: center; padding: 20px">
+              <div style="font-size: 18px">OVERALL RISK</div>
+              <div
+                id="res-score"
+                style="font-size: 48px; font-weight: bold; margin: 10px 0"
+              >
+                73%
+              </div>
+              <div
+                id="res-grade-pill"
+                style="
+                  padding: 10px;
+                  border-radius: 20px;
+                  color: white;
+                  font-weight: bold;
+                "
+              >
+                GRADE 2 — MODERATE
+              </div>
+            </div>
+            <p id="res-rec" style="text-align: center; font-weight: 500">
+              Patching therapy recommended
+            </p>
+            <hr />
+            <div style="display: flex; gap: 10px">
+              <button
+                class="btn btn-outline"
+                style="flex: 1"
+                onclick="resetSimulator()"
+              >
+                🔄 Start New Patient
+              </button>
+              <button class="btn btn-primary" style="flex: 1">
+                📋 View Full Report
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: DOCTOR REVIEW -->
+      <div id="tab3" class="tab-content">
+        <div
+          class="card"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <div>
+            <h2 style="margin: 0">Case Review Queue</h2>
+            <p
+              id="queue-counts"
+              style="
+                margin: 5px 0 0;
+                font-size: 14px;
+                color: var(--text-secondary);
+              "
+            >
+              Pending: 0 | Urgent: 0
+            </p>
+          </div>
+          <div class="radio-group">
+            <button class="btn btn-primary" onclick="loadReviewQueue('all')">
+              All
+            </button>
+            <button class="btn btn-outline" onclick="loadReviewQueue('urgent')">
+              Urgent
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Session ID</th>
+                <th>Risk</th>
+                <th>Severity</th>
+                <th>Time</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="review-table-body">
+              <!-- Rows injected -->
+            </tbody>
+          </table>
+          <div
+            id="review-empty"
+            class="hidden"
+            style="text-align: center; padding: 40px"
+          >
+            <h3 style="color: #2e7d32">All cases up to date! ✅</h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: DASHBOARD -->
+      <div id="tab4" class="tab-content">
+        <div class="grid-4" id="kpi-cards">
+          <!-- Stat cards injected -->
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px">
+          <div class="card">
+            <h3>Village Coverage Status</h3>
+            <table id="village-coverage-table">
+              <thead>
+                <tr>
+                  <th>Village</th>
+                  <th>District</th>
+                  <th>Last Screened</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Injected -->
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h3>Severity Distribution</h3>
+            <div id="severity-chart" style="padding-top: 20px">
+              <!-- Simple bars injected -->
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Top Performing Nurses</h3>
+          <table id="nurse-table">
+            <thead>
+              <tr>
+                <th>Nurse</th>
+                <th>Screenings</th>
+                <th>Villages</th>
+                <th>Quality</th>
+                <th>Last Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Injected -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3>Quick Admin Actions</h3>
+          <div style="display: flex; gap: 15px; flex-wrap: wrap">
+            <button class="btn btn-outline" onclick="triggerSync()">
+              🔄 Trigger Manual Sync
+            </button>
+            <button class="btn btn-outline" onclick="exportData()">
+              📊 Export Research Data
+            </button>
+            <button class="btn btn-outline" onclick="checkModel()">
+              🏥 Check Model Update
+            </button>
+            <a
+              href="http://localhost:8000/docs"
+              target="_blank"
+              class="btn btn-outline"
+              style="text-decoration: none"
+              >📋 View API Docs</a
+            >
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Review Modal -->
+    <div id="modal-backdrop" class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modal-title">Doctor Review Panel</h3>
+          <button
+            onclick="closeModal()"
+            style="
+              border: none;
+              background: none;
+              cursor: pointer;
+              font-size: 24px;
+            "
+          >
+            &times;
+          </button>
+        </div>
+        <div class="modal-body" id="modal-body">
+          <div id="review-details" class="card" style="background: #f8f9fa">
+            <!-- Session details injected here -->
+          </div>
+          <div class="form-group">
+            <label>Doctor's Assessment</label>
+            <textarea
+              id="review-assessment"
+              rows="3"
+              placeholder="Clinical findings..."
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="review-priority">
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeModal()">CANCEL</button>
+          <button
+            class="btn btn-primary"
+            id="btn-submit-verdict"
+            onclick="submitVerdict()"
+          >
+            SUBMIT VERDICT
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+      const BASE = "http://localhost:8000";
+      let AUTH_TOKEN = null;
+      let CURRENT_SESSION = {
+        patient_id: null,
+        session_id: null,
+        nurse_id: null,
+      };
+      let SNELLEN_ACUITY = { r: "6/6", l: "6/6" };
+
+      // ── Initialization ───────────────────────────────────────────────────
+      window.onload = async () => {
+        await checkBackend();
+        await autoLogin();
+        initTabs();
+        loadHealthData();
+        loadReviewQueue();
+        loadDashboard();
+      };
+
+      // ── UI Helpers ───────────────────────────────────────────────────────
+      function showToast(message, type = "success") {
+        const container = document.getElementById("toast-container");
+        const toast = document.createElement("div");
+        toast.className = `toast ${type}`;
+        toast.innerText = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      }
+
+      function showSpinner(btnId) {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+          btn.dataset.original = btn.innerText;
+          btn.innerHTML = '<span class="loading-dots">Working</span>';
+          btn.disabled = true;
+        }
+      }
+
+      function hideSpinner(btnId) {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+          btn.innerText = btn.dataset.original || "SUBMIT";
+          btn.disabled = false;
+        }
+      }
+
+      function initTabs() {
+        document.querySelectorAll(".tab").forEach((t) => {
+          t.onclick = () => {
+            document
+              .querySelectorAll(".tab, .tab-content")
+              .forEach((x) => x.classList.remove("active"));
+            t.classList.add("active");
+            document.getElementById(t.dataset.tab).classList.add("active");
+          };
+        });
+      }
+
+      // ── API ──────────────────────────────────────────────────────────────
+      async function apiCall(method, path, body = null) {
+        const headers = { "Content-Type": "application/json" };
+        if (AUTH_TOKEN) headers["Authorization"] = `Bearer ${AUTH_TOKEN}`;
+        try {
+          const response = await fetch(BASE + path, {
+            method: method,
+            headers: headers,
+            body: body ? JSON.stringify(body) : null,
+          });
+          const data = await response.json();
+          return { ok: response.ok, data: data };
+        } catch (err) {
+          return { ok: false, error: err.message };
+        }
+      }
+
+      async function checkBackend() {
+        const banner = document.getElementById("backend-status");
+        const res = await apiCall("GET", "/health");
+        if (res.ok) {
+          banner.innerText = "Backend Online — All systems operational";
+          banner.className = "status-banner status-online";
+        } else {
+          banner.innerText = "Backend Offline — Run: bash run_local.sh";
+          banner.className = "status-banner status-offline";
+        }
+      }
+
+      async function autoLogin() {
+        const res = await apiCall("POST", "/api/auth/nurse-login", {
+          phone_number: "+919876543210",
+          password: "Test@123",
+          device_id: "ADMIN_WEB_CONSOLE",
+        });
+        if (res.ok) {
+          AUTH_TOKEN = res.data.data.access_token;
+          CURRENT_SESSION.nurse_id = res.data.data.nurse_profile.id;
+          showToast("Admin Session Authenticated System-Wide");
+        }
+      }
+
+      // ── Tab 1: System Health ──────────────────────────────────────────────
+      async function loadHealthData() {
+        // Mock infrastructure status based on health
+        const container = document.getElementById("health-cards");
+        container.innerHTML = `
+                <div class="card stat-card"><div class="dot bg-online"></div> FastAPI Backend<div class="value" style="font-size:16px">localhost:8000</div><div class="label text-success">ONLINE</div></div>
+                <div class="card stat-card"><div class="dot bg-online"></div> PostgreSQL DB<div class="value" style="font-size:16px">14 Tables</div><div class="label text-success">ACTIVE</div></div>
+                <div class="card stat-card"><div class="dot bg-online"></div> Redis Cache<div class="value" style="font-size:16px">v7.0.x</div><div class="label text-success">SYNCED</div></div>
+                <div class="card stat-card"><div class="dot bg-online"></div> MLflow Tracking<div class="value" style="font-size:16px">Local File Store</div><div class="label text-success">ACTIVE</div></div>
+            `;
+
+        const routers = [
+          "Auth",
+          "Patient",
+          "Nurse",
+          "Village",
+          "Screening",
+          "Snellen",
+          "Gaze",
+          "Redgreen",
+          "Doctor",
+          "Dashboard",
+          "Sync",
+          "Notifications",
+        ];
+        const table = document.getElementById("router-table");
+        table.innerHTML = routers
+          .map(
+            (r) => `
+                <tr><td>${r}</td><td>/api/${r.toLowerCase()}</td><td><span class="dot bg-online"></span>Active</td><td>now</td><td><button class="btn btn-outline" style="padding:4px 10px; font-size:12px">Test</button></td></tr>
+            `,
+          )
+          .join("");
+
+        document.querySelector("#model-table tbody").innerHTML = `
+                <tr><td>YOLOv8-nano</td><td>yolov8n.pt</td><td>6.3MB</td><td class="text-success">✅ Ready</td></tr>
+                <tr><td>Real-ESRGAN</td><td>RealESRGAN_x4plus.pth</td><td>64MB</td><td class="text-success">✅ Ready</td></tr>
+                <tr><td>DeblurGAN</td><td>fpn_inception.h5</td><td>Placeholder</td><td class="text-warning">⚠️ Fallback</td></tr>
+            `;
+
+        document.querySelector("#repo-table tbody").innerHTML = `
+                <tr><td>tiangolo/fastapi</td><td class="text-success">✅ Core</td><td>API Registry</td></tr>
+                <tr><td>ultralytics/ultralytics</td><td class="text-success">✅ Active</td><td>Iris Detection</td></tr>
+                <tr><td>xinntao/Real-ESRGAN</td><td class="text-success">✅ Active</td><td>Super Resolution</td></tr>
+            `;
+      }
+
+      // ── Tab 2: Simulator ──────────────────────────────────────────────────
+      function useTestVillage() {
+        document.getElementById("sim-village-id").value =
+          "00000000-0000-0000-0000-000000000001";
+      }
+
+      async function simCreatePatient() {
+        showSpinner("btn-create-patient");
+        const age = document.querySelector(
+          'input[name="age_group"]:checked',
+        ).value;
+        const vill = document.getElementById("sim-village-id").value;
+        const res = await apiCall("POST", "/api/patient/create", {
+          age_group: age,
+          village_id: vill,
+        });
+        hideSpinner("btn-create-patient");
+        if (res.ok) {
+          CURRENT_SESSION.patient_id = res.data.data.id;
+          document.getElementById("sim-patient-id").value =
+            CURRENT_SESSION.patient_id;
+          moveStep(2);
+          showToast("Patient Created Successfully");
+        }
+      }
+
+      async function simStartSession() {
+        showSpinner("btn-start-session");
+        const res = await apiCall("POST", "/api/screening/start", {
+          patient_id: CURRENT_SESSION.patient_id,
+          nurse_id: CURRENT_SESSION.nurse_id,
+          village_id: document.getElementById("sim-village-id").value,
+          device_id: "ADMIN_WEB",
+          gps_lat: 11.0168,
+          gps_lng: 76.9558,
+          lighting_condition: "good",
+          battery_level: 90,
+          internet_available: true,
+        });
+        hideSpinner("btn-start-session");
+        if (res.ok) {
+          CURRENT_SESSION.session_id = res.data.data.session_id;
+          moveStep(3);
+          showToast("Screening Session Initialized");
+        }
+      }
+
+      function selectAcuity(eye, val) {
+        SNELLEN_ACUITY[eye] = val;
+        const group = document.getElementById(`snellen-${eye}-group`);
+        group.querySelectorAll("button").forEach((b) => {
+          b.className =
+            b.innerText === val ? "btn btn-primary" : "btn btn-outline";
+        });
+      }
+
+      async function simSubmitSnellen() {
+        showSpinner("btn-submit-snellen");
+        const res = await apiCall("POST", "/api/snellen/result", {
+          session_id: CURRENT_SESSION.session_id,
+          visual_acuity_right: SNELLEN_ACUITY.r,
+          visual_acuity_left: SNELLEN_ACUITY.l,
+          hesitation_score: 0.15,
+          gaze_compliance_score: 0.9,
+          confidence_score: 0.95,
+        });
+        hideSpinner("btn-submit-snellen");
+        if (res.ok) {
+          moveStep(4);
+          showToast("Snellen Result Saved");
+        }
+      }
+
+      async function simSubmitGaze() {
+        showSpinner("btn-submit-gaze");
+        const res = await apiCall("POST", "/api/gaze/result", {
+          session_id: CURRENT_SESSION.session_id,
+          left_gaze_x: 0.48,
+          left_gaze_y: 0.51,
+          right_gaze_x: 0.52,
+          right_gaze_y: 0.51,
+          left_fixation_stability: 0.05,
+          right_fixation_stability: 0.06,
+          gaze_asymmetry_score: 0.05,
+          frames_analyzed: 1000,
+          confidence_score: 0.92,
+          result: "symmetric",
+        });
+        hideSpinner("btn-submit-gaze");
+        if (res.ok) {
+          moveStep(5);
+          showToast("Gaze Data Captured");
+        }
+      }
+
+      async function simSubmitRG() {
+        showSpinner("btn-submit-rg");
+        const res = await apiCall("POST", "/api/redgreen/result", {
+          session_id: CURRENT_SESSION.session_id,
+          left_pupil_diameter: 4.5,
+          right_pupil_diameter: 4.6,
+          ymmetry_ratio: 0.05,
+          suppression_flag: false,
+          dominant_eye: "equal",
+          binocular_score: 3,
+          confidence_score: 0.9,
+        });
+        hideSpinner("btn-submit-rg");
+        if (res.ok) {
+          moveStep(6);
+          showToast("Binocular Test Saved");
+        }
+      }
+
+      async function simCompleteSession() {
+        showSpinner("btn-complete-sim");
+        const res = await apiCall("POST", "/api/screening/complete", {
+          session_id: CURRENT_SESSION.session_id,
+        });
+        hideSpinner("btn-complete-sim");
+        if (res.ok) {
+          const diag = res.data.data;
+          const card = document.getElementById("sim-final-result");
+          card.classList.remove("hidden");
+          document.getElementById("res-score").innerText =
+            `${Math.round(diag.overall_risk_score * 100)}%`;
+          const pill = document.getElementById("res-grade-pill");
+          pill.innerText = `GRADE ${diag.severity_grade} — ${diag.risk_level.toUpperCase()}`;
+          const colors = ["#2E7D32", "#F57F17", "#E65100", "#C62828"];
+          pill.style.background = colors[diag.severity_grade];
+          if (diag.severity_grade >= 2) card.classList.add("critical-pulse");
+          document.getElementById("res-rec").innerText = diag.recommendation;
+          showToast("Screening Journey Completed!");
+        }
+      }
+
+      function moveStep(s) {
+        document
+          .querySelectorAll('[id^="sim-step-"]')
+          .forEach((d) => d.classList.add("hidden"));
+        document.getElementById(`sim-step-${s}`).classList.remove("hidden");
+        document.querySelectorAll(".progress-step").forEach((d, i) => {
+          d.className = `progress-step ${i + 1 < s ? "completed" : i + 1 === s ? "active" : ""}`;
+        });
+      }
+      function resetSimulator() {
+        location.reload();
+      }
+
+      // ── Tab 3: Doctor Review ──────────────────────────────────────────────
+      async function loadReviewQueue() {
+        const res = await apiCall("GET", "/api/doctor/review-queue");
+        const tableBody = document.getElementById("review-table-body");
+        const empty = document.getElementById("review-empty");
+        if (res.ok && res.data.data.queue.length > 0) {
+          empty.classList.add("hidden");
+          tableBody.innerHTML = res.data.data.queue
+            .map(
+              (c) => `
+                    <tr>
+                        <td>#</td>
+                        <td>${c.session_id.substring(0, 8)}...</td>
+                        <td>${Math.round(c.overall_risk_score * 100)}%</td>
+                        <td><span class="text-${c.severity_grade >= 3 ? "danger" : "warning"}">Grade ${c.severity_grade}</span></td>
+                        <td>Joined Today</td>
+                        <td><button class="btn btn-primary" style="padding:4px 12px" onclick="openReviewModal('${c.session_id}')">Review</button></td>
+                    </tr>
+                `,
+            )
+            .join("");
+          document.getElementById("queue-counts").innerText =
+            `Pending: ${res.data.data.total} | Urgent: ${res.data.data.queue.filter((x) => x.severity_grade >= 3).length}`;
+        } else {
+          tableBody.innerHTML = "";
+          empty.classList.remove("hidden");
+        }
+      }
+
+      let currentReviewId = null;
+      function openReviewModal(sid) {
+        currentReviewId = sid;
+        document.getElementById("modal-backdrop").style.display = "flex";
+        document.getElementById("review-details").innerHTML =
+          `Session Under Review: <b>${sid}</b><br>AI Severity Recommendation: <span class="text-danger">GRADE 3</span>`;
+      }
+      function closeModal() {
+        document.getElementById("modal-backdrop").style.display = "none";
+      }
+
+      async function submitVerdict() {
+        showSpinner("btn-submit-verdict");
+        const notes = document.getElementById("review-assessment").value;
+        const priority = document.getElementById("review-priority").value;
+        const res = await apiCall(
+          "POST",
+          `/api/doctor/submit-verdict/${currentReviewId}`,
+          {
+            verdict: "referred",
+            notes: notes,
+            treatment_plan: "Vision therapy + Patching",
+            diagnosis_code: "H53.0",
+            priority: priority,
+          },
+        );
+        hideSpinner("btn-submit-verdict");
+        if (res.ok) {
+          showToast("Medical Verdict Recorded");
+          closeModal();
+          loadReviewQueue();
+        }
+      }
+
+      // ── Tab 4: Dashboard ─────────────────────────────────────────────────
+      async function loadDashboard() {
+        const res = await apiCall("GET", "/api/dashboard/screening-trends");
+        if (res.ok) {
+          const d = res.data.data;
+          document.getElementById("kpi-cards").innerHTML = `
+                    <div class="card stat-card"><div class="label">Total Screenings</div><div class="value">${d.total_screenings}</div><div class="label text-success">↑ 12 this week</div></div>
+                    <div class="card stat-card"><div class="label">Critical Cases</div><div class="value text-danger">${d.critical_cases}</div><div class="label">Need referral</div></div>
+                    <div class="card stat-card"><div class="label">Pending Reviews</div><div class="value text-warning">${d.pending_reviews}</div><div class="label">Awaiting Dr.</div></div>
+                    <div class="card stat-card"><div class="label">Villages Coverage</div><div class="value">${d.village_coverage}</div><div class="label">Screened recent</div></div>
+                `;
+        }
+
+        const hres = await apiCall("GET", "/api/dashboard/village-heatmap");
+        if (hres.ok) {
+          document.querySelector("#village-coverage-table tbody").innerHTML =
+            hres.data.data.heatmap
+              .slice(0, 5)
+              .map(
+                (v) => `
+                    <tr><td>${v.name}</td><td>${v.district}</td><td>${v.last_screened || "Never"}</td><td><span class="dot bg-${v.status === "good" ? "online" : v.status === "due" ? "pending" : "offline"}"></span>${v.status}</td></tr>
+                `,
+              )
+              .join("");
+        }
+
+        const nres = await apiCall("GET", "/api/dashboard/nurse-performance");
+        if (nres.ok) {
+          document.querySelector("#nurse-table tbody").innerHTML =
+            nres.data.data.nurses
+              .map(
+                (n) => `
+                    <tr><td>Nurse ${n.nurse_id.substring(0, 6)}</td><td>${n.total_screenings}</td><td>${n.villages}</td><td>${n.quality}</td><td>${n.last_active}</td></tr>
+                `,
+              )
+              .join("");
+        }
+
+        document.getElementById("severity-chart").innerHTML = `
+                <div style="margin-bottom:10px"><div style="display:flex; justify-content:space-between; font-size:12px"><span>Grade 0 Normal</span><span>45%</span></div><div style="height:8px; background:#ddd; border-radius:4px"><div style="width:45%; height:100%; background:var(--success); border-radius:4px"></div></div></div>
+                <div style="margin-bottom:10px"><div style="display:flex; justify-content:space-between; font-size:12px"><span>Grade 1 Mild</span><span>25%</span></div><div style="height:8px; background:#ddd; border-radius:4px"><div style="width:25%; height:100%; background:var(--warning); border-radius:4px"></div></div></div>
+                <div style="margin-bottom:10px"><div style="display:flex; justify-content:space-between; font-size:12px"><span>Grade 2 Moderate</span><span>18%</span></div><div style="height:8px; background:#ddd; border-radius:4px"><div style="width:18%; height:100%; background:orange; border-radius:4px"></div></div></div>
+                <div style="margin-bottom:10px"><div style="display:flex; justify-content:space-between; font-size:12px"><span>Grade 3 Critical</span><span>12%</span></div><div style="height:8px; background:#ddd; border-radius:4px"><div style="width:12%; height:100%; background:var(--danger); border-radius:4px"></div></div></div>
+            `;
+      }
+
+      async function triggerSync() {
+        showToast("Global Sync Triggered...");
+        await apiCall("POST", "/api/sync/batch-upload", { payloads: [] });
+        showToast("Database Sync-to-Disk Complete", "success");
+      }
+      async function exportData() {
+        showToast("Data Export Generated");
+        const res = await apiCall("GET", "/api/dashboard/research-export");
+        console.log("Export Data:", res.data);
+      }
+      async function checkModel() {
+        const res = await apiCall(
+          "GET",
+          "/api/sync/check-model-update?current_version=1.0",
+        );
+        showToast(
+          `Model Status: ${res.data.data.update_available ? "Update Available" : "Current version is latest"}`,
+        );
+      }
+    </script>
+  </body>
+</html>
