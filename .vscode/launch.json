@@ -1,0 +1,38 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Flutter (Chrome)",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "AmbyoAI",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "AmbyoAI (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "AmbyoAI (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "Flutter (Chrome, Disable Web Security)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "-d",
+                "chrome",
+                "--web-browser-flag=--disable-web-security"
+            ]
+        }
+    ]
+}

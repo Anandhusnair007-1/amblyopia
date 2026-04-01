@@ -1,0 +1,120 @@
+/*
+ * Copyright 2024 Amrita School of Computing & Aravind Eye Hospital
+ * Use of this source code is governed by Apache License 2.0 that can be found in the LICENSE file or at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+ 
+}
+
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+def keystorePropertiesFile = rootProject.file("key.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.amrita.ambyoai"
+    compileSdkVersion 36
+    ndkVersion flutter.ndkVersion
+
+    packagingOptions {
+        pickFirst '**/libvosk.so'
+        pickFirst '**/libsqlcipher.so'
+    }
+
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        applicationId "com.amrita.ambyoai"
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    signingConfigs {
+        debug {
+            // Uses default debug keystore ~/.android/debug.keystore
+        }
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+            } else {
+                // Fallback to debug keystore for local testing only. NOT for distribution.
+                storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.release
+            if (keystorePropertiesFile.exists()) {
+                minifyEnabled true
+                shrinkResources true
+            } else {
+                minifyEnabled false
+                shrinkResources false
+            }
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            ndk {
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
+            }
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    implementation 'net.zetetic:android-database-sqlcipher:4.5.4@aar'
+    implementation 'androidx.sqlite:sqlite:2.4.0'
+}

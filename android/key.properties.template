@@ -1,0 +1,8 @@
+# Copy this file to key.properties
+# Fill in your keystore details
+# NEVER commit key.properties to git
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEYSTORE_PASSWORD
+keyAlias=ambyoai
+storeFile=../ambyoai-release.jks

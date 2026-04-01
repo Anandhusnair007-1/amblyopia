@@ -1,0 +1,154 @@
+name: ambyo_ai
+description: >
+  AmbyoAI — AI-powered amblyopia and lazy eye screening tool built for Aravind Eye Hospital
+  and Amrita School of Computing. Fully offline, voice-driven, touchless, camera-based clinical
+  screening for children. No physical equipment needed.
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.1.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # UI & Fonts
+  cupertino_icons: ^1.0.2
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.5.0
+  rive: ^0.12.4
+  lottie: ^3.0.0
+
+  # State Management & Config
+  flutter_riverpod: ^2.4.9
+  provider: ^6.1.2
+  flutter_dotenv: ^5.1.0
+
+  # Camera & Vision
+  camera: ^0.10.5
+  google_mlkit_face_detection: ^0.13.2
+  google_mlkit_face_mesh_detection: ^0.4.2
+  google_mlkit_pose_detection: ^0.14.1
+
+  # Offline Speech Recognition
+  speech_to_text: ^7.0.0
+  vosk_flutter:
+    git:
+      url: https://github.com/alphacep/vosk-flutter.git
+      ref: master
+
+  # On-Device AI Inference
+  tflite_flutter: 0.10.3
+
+  # Image Processing
+  opencv_dart: ^1.0.6
+
+  # Local Encrypted Database
+  drift: ^2.14.0
+  sqlcipher_flutter_libs: ^0.5.4
+  sqlite3: ^2.1.0
+
+  # Encryption & Secure Storage
+  encrypt: ^5.0.3
+  flutter_secure_storage: ^9.0.0
+  permission_handler: ^11.3.1
+  device_info_plus: ^9.1.2
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
+  path: ^1.9.0
+  crypto: ^3.0.3
+  uuid: ^4.5.1
+
+  # PDF Report Generator
+  pdf: ^3.10.7
+  printing: ^5.11.0
+  pdf_render_maintained: ^1.6.1
+  intl: ^0.20.2
+  image: ^4.1.3
+
+  # Networking & Background Sync
+  dio: ^5.4.0
+  http: ^1.2.1
+  connectivity_plus: ^6.0.3
+  workmanager: ^0.9.0
+
+  # Notifications
+  flutter_local_notifications: ^17.0.0
+
+  # UX Utilities
+  shimmer: ^3.0.0
+  cached_network_image: ^3.3.0
+  share_plus: ^10.1.4
+  fl_chart: ^0.68.0
+  wakelock_plus: ^1.2.1
+  screen_brightness: ^0.2.2+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  drift_dev: ^2.14.0
+  build_runner: ^2.4.8
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#1565C0"
+  adaptive_icon_foreground: "assets/images/app_icon.png"
+  min_sdk_android: 21
+
+flutter_native_splash:
+  color: "#0A1628"
+  color_dark: "#0A1628"
+  android: true
+  ios: true
+  fullscreen: false
+  android_12:
+    color: "#0A1628"
+    color_dark: "#0A1628"
+
+dependency_overrides:
+  tflite_flutter:
+    git:
+      url: https://github.com/tensorflow/flutter-tflite.git
+      ref: main
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/models/
+    - assets/vosk/vosk-en/
+    - assets/vosk/vosk-ml/
+    - assets/vosk/vosk-hi/
+    - assets/vosk/vosk-ta/
+    - assets/ishihara/
+    - assets/animations/
+    - assets/images/
+    - .env
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono-SemiBold.ttf
+          weight: 600
