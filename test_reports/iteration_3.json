@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend E2E testing of AmbyoAI v2 (patient + doctor portals) on preview URL. 23/24 requested flows PASS. Core navigation, auth (patient OTP + doctor password), doctor dashboard (stats/filters/search), patient detail + session medical report (findings, diagnosis form, save, download PDF button), patient flow (phone-OTP → register → home → consent → test-runner shell) all work. Role guards working. Only gap: language switcher is rendered on every page but new v2 screens have hardcoded English strings and do NOT call t(), so EN/TA/ML clicks visibly change labels only on ConsentScreen and TestRunner.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Language switcher (EN/TA/ML)",
+        "issue": "Switcher button is visible on Landing, PatientLogin, DoctorLogin, DoctorDashboard, DoctorPatientDetail, DoctorReport, PatientHome, PatientRegister, PatientResults but clicking TA or ML does NOT change any displayed label. These screens import useI18n() but every string is hardcoded English (e.g. Landing.jsx lines 49-100 use literal 'Detect lazy eye in under 3 minutes', 'Patient Portal', 'Continue as doctor' etc.). Only /patient/consent and /patient/session/:id/test/:i (TestRunner) actually re-render with the selected language. Review-request bullet 'Language switcher EN/TA/ML changes labels on any page' is only partially satisfied.",
+        "affected_selectors": ["[data-testid=\"lang-ta\"]", "[data-testid=\"lang-ml\"]", "[data-testid=\"lang-en\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [".screenshots/01_landing.png", ".screenshots/02_doctor_dashboard.png", ".screenshots/03_patient_detail.png", ".screenshots/04_doctor_report.png", ".screenshots/patient_home.png", ".screenshots/testrunner.png"],
+  "action_items": [
+    "Replace hardcoded strings in Landing.jsx, PatientLogin.jsx, DoctorLogin.jsx, PatientHome.jsx, PatientRegister.jsx, DoctorDashboard.jsx, DoctorPatientDetail.jsx, DoctorReport.jsx, PatientResults.jsx with t('key') calls and add the corresponding keys to /app/frontend/src/core/i18n/translations.js for en/ta/ml. Right now the switcher is essentially a no-op on all primary v2 screens."
+  ],
+  "critical_code_review_comments": [
+    "Landing.jsx (and most v2 portal files) import { useI18n } and destructure `t` but never invoke it — dead imports and misleading i18n surface. Either wire up t() or remove the switcher from those pages.",
+    "PatientLogin.jsx uses shadcn InputOTP with a single internal input — works fine with Playwright .fill() on the last input, but note that the autosubmit path relies on OTP length===4 effect; acceptable.",
+    "DoctorReport.jsx: medical-findings render correctly (1 finding shown for TEST_Normal session). Consider handling empty findings gracefully (not observed here but worth a defensive check).",
+    "ProtectedRoute sends any unauthed user to '/' regardless of attempted role, and Landing auto-redirects based on role, so /doctor with patient token funnels through landing → /patient (works but an extra hop). Consider direct role-aware redirect in ProtectedRoute to skip the landing flash."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "95%"},
+  "test_credentials": "Doctor: doctor@aravind.in / aravind2026 — works. Patient OTP 1234 on any 10-digit phone — works.",
+  "seed_data_creation": "Created test patient profile 'TEST_Auto2' (DOB 2018-05-15) and one in-progress screening session via phone 9536423780; prior screening session #914d29b1 on TEST_Normal used for doctor-report save-diagnosis (now has 'TEST diagnosis note' / 'TEST treatment plan' saved).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Doctor dashboard shows 6 seeded patients (TEST_Normal with 1 session, TEST_Intruder, TEST_Other, TEST_Flow urgent, TEST_Patient, TEST_Child_47b9d9 urgent). Completed/Urgent/Today/To-Review counters are populated. OTP step uses shadcn InputOTP; to enter OTP programmatically use: `await page.locator('[data-testid=\"otp-input\"]').fill('1234')` on the single underlying input. Camera permission is denied in test env so MediaPipe-based test components show their fallback but the shell (exit-test, skip-test, progress bar, step label) renders correctly.",
+  "rca of the issue": "Language-switcher gap RCA: new v2 portal components were scaffolded after translations.js was last extended. Developers imported useI18n to satisfy lint/pattern but wrote JSX with literal English strings. Fix = extract each literal into a translation key in /app/frontend/src/core/i18n/translations.js (en/ta/ml objects) and replace JSX literals with {t('key')}. Reproduction: open any v2 page (e.g. /doctor), click [data-testid=lang-ta] or [data-testid=lang-ml], observe body text unchanged. Mitigation: same as fix above."
+}

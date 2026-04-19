@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+env/
+venv/
+.venv/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files with secrets — but keep .env.example
+.env
+.env.local
+.env.production
+backend/.env
+frontend/.env
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# MediaPipe local models (large)
+frontend/public/models/*.task
+frontend/public/models/*.tflite
+
+# Backend local data
+backend/local_data/
+backend/*.db
+
+# Supervisor / runtime
+supervisord.log
+supervisord.pid
+
+# Playwright
+test-results/
+playwright-report/
+frontend/node_modules/.cache/default-development/19.pack

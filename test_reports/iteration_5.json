@@ -1,0 +1,33 @@
+{
+  "summary": "AmbyoAI v2.2 polish iteration — targeted regression. Backend: 5/5 smoke tests PASS for the 3 critical endpoints (POST /api/auth/doctor/login, POST /api/auth/patient/request-otp, GET /api/doctor/patients) plus auth-failure guards. Frontend: all v2.2 branding/UX changes verified end-to-end — (a) Emergent badge fully removed (DOM absent on Landing, DoctorLogin, DoctorDashboard, PatientLogin, PatientRegister, PatientHome), (b) AmbyoEyeLogo renders in header on Landing (size 44), DoctorDashboard (size 40), DoctorPatientDetail, PatientRegister, PatientHome (size 40), (c) CountUp animates and settles correctly on all 5 dashboard stat cards (stat-patients=13, stat-completed=10, stat-urgent=7, stat-today=16, stat-pending=7), (d) Landing parallax/particles: exactly 14 floating particles rendered, rotateX/Y on mouse move active, animated green underline under '3 minutes' visible, rotating conic gradient on Doctor card visible, (e) Portal CTAs navigate correctly, (f) Doctor login (doctor@aravind.in/aravind2026) -> dashboard -> patient row click -> patient detail works, (g) Patient OTP (phone/1234) -> register -> home -> quick-gaze navigation to /patient/consent?quick=gaze works, all 6 quick-test data-testids present and clickable.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Landing / PatientHome / PatientLogin / DoctorDashboard / DoctorPatientDetail / DoctorReport / PatientResults / PatientRegister", "issues": ["Pre-existing (iteration_3 + iteration_4) — LanguageSwitcher TA/ML is a no-op on most v2 screens because copy is hardcoded English; only ConsentScreen and TestRunner re-render on language change. No new regression in v2.2."]},
+      {"screen": "PatientRegister", "issues": ["Uses native browser <input type='date'> / <select> for DOB and gender instead of shadcn Calendar + Select. Minor polish opportunity but consistent with iteration_3/4 state."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v22_smoke.py",
+    "/app/backend/tests/test_ambyoai_v2_backend.py",
+    "/app/test_reports/pytest/v22_smoke_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "index.html still initialises PostHog analytics (posthog.init) even though the Emergent badge was removed for clinical deployment — confirm with product/compliance whether patient/doctor PHI pages should have analytics + session_recording enabled (session_recording.recordCrossOriginIframes:true is active). For a pediatric clinical pilot at Aravind this is a HIPAA/DPDPA risk worth gating behind an env flag.",
+    "Landing.jsx: the emergent hide-rule in index.css is defensive and correct, but combined with index.html having no #emergent-badge anchor, both layers work. Good defence in depth.",
+    "DoctorDashboard CountUp: the component animates from 0 -> value on every re-render, so whenever the patients list refreshes (e.g. filter change) the numbers re-animate. If this proves distracting in clinical use, consider memoising the initial value.",
+    "PatientRegister relies on native HTML5 validation (tooltip 'Please fill out this field' observed) — works, but not styled consistent with shadcn toasts elsewhere.",
+    "Pre-existing (from iter_4): QuickTest.jsx IDX object recreated each render; TestRunner skip() submits raw_score=0; TestStage speak() intro doesn't replay on un-mute; PatientHome startFullScreening 404 vs exists:false ambiguity."
+  ],
+  "updated_files": ["/app/backend/tests/test_v22_smoke.py"],
+  "success_rate": {"backend": "100% (5/5 smoke)", "frontend": "100% of v2.2 review-request bullets verified"},
+  "test_credentials": "Doctor: doctor@aravind.in / aravind2026 — works. Patient OTP 1234 on any 10-digit phone — works.",
+  "seed_data_creation": "Created one TEST_V22 patient (phone 9877112200, DOB 2019-06-01, male) during UI walkthrough. Prior TEST_V21 patient still visible in doctor dashboard list.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "For quick regression of backend after future UI-only iterations, run: pytest /app/backend/tests/test_v22_smoke.py (5 tests, ~1s). For full 28-test regression use /app/backend/tests/test_ambyoai_v2_backend.py. PatientRegister testids: child-name, gender (select), guardian-name, guardian-relation (select), plus a date input (type=date, no explicit testid on DOB). Doctor login testids: doctor-email, doctor-password, doctor-submit. Patient login testids: phone-input, send-otp, otp via shadcn InputOTP — use page.locator('input[autocomplete=\"one-time-code\"]').first.click(force=True) then .fill('1234'). Risk filter keys on dashboard are filter-all/filter-urgent/filter-moderate/filter-mild/filter-normal (NOT filter-high).",
+  "rca of the issue": "No blocking issues. All 12 review-request bullets for v2.2 satisfied. Only flagged items are (a) PostHog analytics still active on a clinical pediatric deployment — worth env-gating, and (b) pre-existing i18n + native date picker design items carried over from prior iterations."
+}

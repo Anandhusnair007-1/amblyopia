@@ -1,0 +1,16 @@
+{
+  "short_name": "AmbyoAI",
+  "name": "AmbyoAI — Pediatric Amblyopia Screening",
+  "description": "Browser-based pediatric amblyopia screening — 6 clinical tests with AI risk scoring. Aravind Eye Hospital pilot.",
+  "start_url": "/login",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0A2540",
+  "background_color": "#F8FAFC",
+  "lang": "en",
+  "scope": "/",
+  "icons": [
+    { "src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

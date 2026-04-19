@@ -1,0 +1,201 @@
+{
+  "brand_identity": {
+    "name": "AmbyoAI",
+    "domain": "Pediatric Amblyopia Screening System",
+    "theme": "hybrid_fullstack",
+    "archetype": "4 (Swiss & High-Contrast) + Medical Variant",
+    "emotional_tone": "Clinical precision, hospital-grade trust, calm and reliable",
+    "rules": [
+      "No purple or teal AI slop gradients. Strictly medical imaging palette.",
+      "Worker UI must be legible in outdoor/bright daylight (camp screening).",
+      "Test execution screens MUST be dark navy (#0A0F1C) for maximum camera contrast and tracking accuracy.",
+      "Children-facing elements should be friendly but strictly professional.",
+      "Confidentiality and trust are paramount; forms must feel secure and authoritative."
+    ]
+  },
+  "typography": {
+    "primary_font": "Plus Jakarta Sans",
+    "mono_font": "JetBrains Mono",
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap",
+    "scales": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight text-slate-900 dark:text-white",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 dark:text-white",
+      "h3": "text-xl sm:text-2xl font-medium tracking-tight text-slate-900 dark:text-white",
+      "body_large": "text-lg font-normal text-slate-700 dark:text-slate-300 leading-relaxed",
+      "body": "text-base font-normal text-slate-600 dark:text-slate-400",
+      "label": "text-sm font-semibold tracking-wide uppercase text-slate-500",
+      "data_readout": "font-mono text-2xl font-bold tracking-tight"
+    }
+  },
+  "colors": {
+    "light_mode": {
+      "background": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "primary": "#0A2540",
+      "secondary": "#0D9488",
+      "text_main": "#0F172A",
+      "text_muted": "#64748B",
+      "border": "#E2E8F0"
+    },
+    "dark_mode": {
+      "background": "#0A0F1C",
+      "surface": "#121A2F",
+      "primary": "#38BDF8",
+      "secondary": "#2DD4BF",
+      "text_main": "#F8FAFC",
+      "text_muted": "#94A3B8",
+      "border": "#1E293B"
+    },
+    "clinical_states": {
+      "good": "#10B981",
+      "caution": "#F59E0B",
+      "urgent": "#EF4444",
+      "neutral": "#94A3B8"
+    }
+  },
+  "spacing_and_layout": {
+    "strategy": "Generous medical spacing with strict geometric alignment. Use 8px grid.",
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "bento_grid": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "card_padding": "p-6 sm:p-8"
+  },
+  "components": {
+    "DistancePill": {
+      "description": "Floating pill showing real-time distance using MediaPipe.",
+      "base_classes": "fixed top-6 left-1/2 -translate-x-1/2 inline-flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-sm backdrop-blur-xl border shadow-lg z-50 transition-colors duration-300",
+      "states": {
+        "good": "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-400",
+        "too_close": "bg-red-500/10 text-red-600 border-red-500/20 dark:bg-red-500/20 dark:text-red-400",
+        "move_closer": "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:bg-amber-500/20 dark:text-amber-400",
+        "face_camera": "bg-slate-500/10 text-slate-600 border-slate-500/20 dark:bg-slate-500/20 dark:text-slate-400"
+      }
+    },
+    "RiskBadge": {
+      "description": "Small indicator badge for patient risk level.",
+      "base_classes": "inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider",
+      "states": {
+        "normal": "bg-slate-100 text-slate-600",
+        "mild": "bg-amber-100 text-amber-700",
+        "severe": "bg-red-100 text-red-700 animate-pulse"
+      }
+    },
+    "UrgentBanner": {
+      "description": "Critical findings alert banner.",
+      "classes": "w-full bg-red-600 text-white p-4 flex items-start gap-4 rounded-xl shadow-lg border-l-4 border-red-900 animate-in slide-in-from-top fade-in duration-300",
+      "typography": "font-semibold text-sm sm:text-base",
+      "icon_classes": "w-6 h-6 shrink-0 text-red-100 animate-pulse"
+    },
+    "ScoreRing": {
+      "description": "SVG Circular progress showing health score.",
+      "wrapper_classes": "relative w-32 h-32 flex items-center justify-center",
+      "svg_classes": "transform -rotate-90 w-full h-full",
+      "circle_bg_classes": "text-slate-100 dark:text-slate-800 stroke-current",
+      "circle_progress_classes": "transition-all duration-1000 ease-out",
+      "text_classes": "absolute inset-0 flex flex-col items-center justify-center font-mono text-3xl font-bold"
+    },
+    "TestProgressBar": {
+      "description": "6-segment progress bar for the testing flow.",
+      "wrapper_classes": "w-full flex gap-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden",
+      "segment_completed": "bg-teal-500 dark:bg-teal-400",
+      "segment_active": "bg-blue-600 dark:bg-blue-500 animate-pulse",
+      "segment_pending": "bg-transparent"
+    },
+    "MicIndicator": {
+      "description": "Voice recognition indicator.",
+      "classes": "inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+      "active_classes": "ring-4 ring-blue-500/20 animate-pulse"
+    },
+    "ConsentForm": {
+      "description": "Clinical consent checklist with toggles.",
+      "container_classes": "bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4",
+      "toggle_row_classes": "flex items-start justify-between gap-4 p-4 rounded-xl hover:bg-slate-50 transition-colors"
+    },
+    "LanguageSwitcher": {
+      "description": "Toggle between EN/TA/ML.",
+      "classes": "flex items-center gap-2 p-1 bg-slate-100 rounded-lg border border-slate-200",
+      "button_active": "bg-white text-slate-900 shadow-sm font-semibold px-3 py-1.5 rounded-md text-sm transition-all",
+      "button_inactive": "text-slate-500 font-medium px-3 py-1.5 text-sm hover:text-slate-700"
+    }
+  },
+  "pages": {
+    "PinLoginScreen": {
+      "layout": "100vh flex flex-col items-center justify-center bg-slate-50 px-4",
+      "elements": [
+        "Hospital Logo / Branding (top)",
+        "AmbyoAI Title (H1)",
+        "4-digit large PIN input boxes (font-mono)",
+        "LanguageSwitcher",
+        "Offline status badge (IndexedDB indicator)"
+      ]
+    },
+    "WorkerHome": {
+      "layout": "Header with Worker Name & Stats -> Main content with Patient Queue. Light theme.",
+      "elements": [
+        "Summary Stats: Total Screened, Pending Referrals",
+        "Button: Register New Patient (Primary CTA, Large)",
+        "Screening Queue: List of PatientCards with Name, Age, RiskBadge"
+      ]
+    },
+    "AddPatient": {
+      "layout": "Clean, linear form inside a max-w-2xl container. Light theme.",
+      "elements": [
+        "Form Fields: Child Name, DOB, Guardian Name, Contact",
+        "ConsentForm component (4 toggles)",
+        "Submit Button"
+      ]
+    },
+    "TestRunnerShell": {
+      "layout": "Fixed viewport, Dark mode strictly enforced (#0A0F1C).",
+      "elements": [
+        "DistancePill at top center",
+        "TestProgressBar at top right",
+        "MicIndicator at bottom right",
+        "Live camera feed PIP (Picture-in-Picture) minimal box at bottom left",
+        "Main test content center stage"
+      ]
+    },
+    "TestScreens": {
+      "VisualAcuity": "Large, high-contrast LEA symbols or Tumbling E in center. 3-2-1 countdown overlay.",
+      "GazeDetection": "9-dot calibration pattern showing sequentially. High contrast white dots on dark navy.",
+      "Hirschberg": "White flash simulator in center. Dark background.",
+      "PrismDiopter": "Guided animation for cover test.",
+      "RedReflex": "Full white screen pulse for 2 seconds to capture pupil reflex, then returns to dark.",
+      "Titmus": "Stereo 3D elements (Fly/Circles) optimized for screen."
+    },
+    "ResultsSummary": {
+      "layout": "Light theme. Grid layout for results.",
+      "elements": [
+        "ScoreRing showing overall health/risk score",
+        "UrgentBanner (if risk is severe)",
+        "List of Findings (Card per test with normal/abnormal tags)",
+        "Download PDF Button (Primary CTA)",
+        "Referral Letter Button"
+      ]
+    }
+  },
+  "motion_and_interaction": {
+    "page_transitions": "animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out",
+    "button_hover": "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+    "test_element_reveal": "animate-in zoom-in-95 duration-500 ease-out",
+    "urgency_pulse": "animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]"
+  },
+  "media": {
+    "images": [
+      {
+        "category": "child_eye_exam",
+        "url": "https://images.pexels.com/photos/12645026/pexels-photo-12645026.jpeg",
+        "description": "Young girl undergoing an eye examination. Use in WorkerHome banner or Add Patient intro."
+      },
+      {
+        "category": "clinic_abstract",
+        "url": "https://images.pexels.com/photos/5752232/pexels-photo-5752232.jpeg",
+        "description": "Modern medical office interior. Use for PinLoginScreen background (heavily blurred or overlaid with white/slate-50)."
+      },
+      {
+        "category": "abstract_gradient",
+        "url": "https://images.pexels.com/photos/6985277/pexels-photo-6985277.jpeg",
+        "description": "Calm subtle gradient. Use for generic card backgrounds or loading screens."
+      }
+    ]
+  }
+}

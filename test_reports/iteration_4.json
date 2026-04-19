@@ -1,0 +1,31 @@
+{
+  "summary": "AmbyoAI v2.1 UX overhaul — full backend regression + targeted frontend flow testing. Backend: 28/28 pytest tests PASS (all prior /api endpoints unchanged, confirmed). Frontend: all new v2.1 flows verified — PatientHome test picker (6 quick cards + hero CTA), AudioToggle on home, QuickTest bootstrapper routing to consent with ?quick=visual_acuity then forwarding to /patient/session/:id/test/0?quick=1, TestRunner glass bar (audio-toggle + offline-badge + language-switcher + exit-test), skip-test hidden in quick mode and visible in full mode, 1/1 vs 6/6 progress, Exit(X) returns to /patient, TestStage renders FaceGuide + stage-start-manual fallback button when camera unavailable (headless).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PatientHome / TestRunner / PatientLogin / Landing / DoctorDashboard", "issues": ["Pre-existing (iteration_3) — LanguageSwitcher TA/ML click is a no-op on most v2 screens because strings are hardcoded English; only ConsentScreen and TestRunner re-render on language change. No regression in v2.1."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ambyoai_v2_backend.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional: Add data-testid=\"test-progress-bar\" wrapper + per-segment data-testid=\"progress-seg-{i}\" on TestProgressBar to make segment count directly queryable by automation (currently only a single data-testid=\"test-progress\" is exposed — visually STEP 1/6 and STEP 1/1 render correctly but automation must rely on text-label count).",
+    "Pre-existing: wire useI18n t() into hardcoded JSX on Landing/PatientHome/PatientLogin/PatientRegister/DoctorDashboard/DoctorPatientDetail/DoctorReport/PatientResults, or remove LanguageSwitcher from those pages.",
+    "Pre-existing: MediaPipe vision_wasm CDN at cdn.jsdelivr.net returns 404 + MIME text/plain for @mediapipe/tasks-vision@0.10.22/wasm/vision_wasm_internal.js — acceptable in test env (FaceGuide gracefully shows Start-now manual bypass), but in production this means face-gate will never auto-advance on user devices that block the CDN. Consider self-hosting the wasm or pinning to a known-good version."
+  ],
+  "critical_code_review_comments": [
+    "QuickTest.jsx effect dep array uses eslint-disable-next-line — fine, but IDX object is recreated each render; move outside component.",
+    "TestRunner.jsx: skip() submits raw_score=0 as a 'skipped' result even in quick mode before navigating to /results. Acceptable since backend classifier treats 0-score titmus/red_reflex specially, but confirm with product — might skew risk for single-test quick runs.",
+    "TestStage.jsx calls speak() inside useEffect without checking muted state from useAudioStore; speak() itself may gate on mute internally but the introSpokenRef.current flag is set before mute check, so unmuting mid-test won't replay the intro. Minor UX polish.",
+    "PatientHome.jsx startFullScreening calls /consent/{id} and relies on c.data.exists === false to decide consent redirect; if API returns a 404 (instead of {exists:false}), the catch toast fires. Defensive handling recommended."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "100% of v2.1 new flows verified"},
+  "test_credentials": "Doctor: doctor@aravind.in / aravind2026 — works. Patient OTP 1234 on any 10-digit phone — works.",
+  "seed_data_creation": "Created one TEST_V21 patient + 2 sessions (one /quick visual_acuity, one full) during UI testing; plus ~5 TEST_* patients from backend pytest run (TEST_Flow, TEST_Other, TEST_Intruder, TEST_Normal, TEST_Patient).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "For Playwright OTP entry on shadcn InputOTP, use: await page.locator('input[autocomplete=\"one-time-code\"]').first.click(force=True); then .fill('1234'). Do NOT use page.keyboard.type without first clicking — the component needs focus. FaceGuide+TestStage correctly shows 'stage-start-manual' Start-now button when camera denied; tests should click that to bypass face-gate. Backend remained completely unchanged from iteration_3; pytest suite at /app/backend/tests/test_ambyoai_v2_backend.py is the authoritative regression for all /api routes.",
+  "rca of the issue": "No blocking issues found. All v2.1 review-request bullets satisfied. Only open items are pre-existing i18n gap (iteration_3) and a third-party MediaPipe CDN wasm MIME/404 issue that does not block the graceful fallback path."
+}
