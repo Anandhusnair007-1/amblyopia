@@ -6,6 +6,8 @@ import OfflineBadge from "@/components/ambyo/OfflineBadge";
 import AmbyoEyeLogo from "@/components/ambyo/AmbyoEyeLogo";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { HeartPulse, Stethoscope, ShieldCheck, ChevronRight, Sparkles, Clock, Languages } from "lucide-react";
+import MedicalDisclaimer from "@/components/MedicalDisclaimer";
+import { useI18n } from "@/core/i18n/translations";
 
 function ParallaxBlob({ className = "", offset = 20 }) {
   return <div className={`absolute rounded-full blur-3xl pointer-events-none ${className}`} style={{ transform: `translateY(${offset}px)` }} />;
@@ -14,6 +16,7 @@ function ParallaxBlob({ className = "", offset = 20 }) {
 export default function Landing() {
   const nav = useNavigate();
   const { token, user } = useAuthStore();
+  const { t } = useI18n();
   const mx = useMotionValue(0), my = useMotionValue(0);
   const rotX = useTransform(my, [-200, 200], [6, -6]);
   const rotY = useTransform(mx, [-200, 200], [-6, 6]);
@@ -63,8 +66,10 @@ export default function Landing() {
         <div className="flex items-center gap-3">
           <AmbyoEyeLogo size={44} />
           <div>
-            <div className="font-bold text-[#0A2540] tracking-tight">AmbyoAI</div>
-            <div className="text-[10px] uppercase tracking-widest text-teal-700 font-semibold">Pediatric Eye Screening</div>
+            <div className="font-bold text-[#0A2540] tracking-tight">{t("app_name")}</div>
+            <div className="text-[10px] uppercase tracking-widest text-teal-700 font-semibold">
+              {t("landing_header_subtitle")}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -73,17 +78,17 @@ export default function Landing() {
         </div>
       </header>
 
-      <main className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 pt-10 sm:pt-16 pb-16">
+      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-20 pt-12 sm:px-10 sm:pt-16">
         <motion.div
           initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.55, ease: [0.22,1,0.36,1] }}
           className="text-center"
         >
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-semibold text-teal-700">
             <Sparkles size={14} />
-            <span>India's first browser-based pediatric amblyopia screening</span>
+            <span>{t("landing_badge")}</span>
           </div>
           <h1 className="mt-6 text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-[#0A2540]">
-            Detect lazy eye in under{" "}
+            {t("landing_headline_prefix")}{" "}
             <span className="relative inline-block">
               <span className="relative z-10 bg-gradient-to-br from-teal-600 to-emerald-500 bg-clip-text text-transparent">3 minutes</span>
               <motion.span
@@ -94,8 +99,8 @@ export default function Landing() {
             <span className="text-[#0A2540]">.</span>
           </h1>
           <p className="mt-5 text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Six clinical tests. Zero equipment. Works offline. Powered by AI and built for the workflow at{" "}
-            <span className="font-semibold text-[#0A2540]">Aravind Eye Hospital</span>.
+            {t("landing_subtitle_prefix")}{" "}
+            <span className="font-semibold text-[#0A2540]">{t("hospital")}</span>.
           </p>
         </motion.div>
 
@@ -103,7 +108,7 @@ export default function Landing() {
           style={{ rotateX: rotX, rotateY: rotY, transformPerspective: 1000 }}
           initial="hidden" animate="show"
           variants={{ hidden: {}, show: { transition: { staggerChildren: 0.12, delayChildren: 0.3 } } }}
-          className="mt-14 grid sm:grid-cols-2 gap-6 max-w-3xl mx-auto"
+          className="mx-auto mt-16 grid max-w-3xl gap-8 sm:grid-cols-2 sm:mt-14"
         >
           {/* Patient Portal */}
           <motion.button
@@ -118,15 +123,15 @@ export default function Landing() {
               <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white group-hover:scale-110 transition-all">
                 <HeartPulse size={26} />
               </div>
-              <h2 className="mt-6 text-2xl font-bold text-[#0A2540] tracking-tight">Patient Portal</h2>
+              <h2 className="mt-6 text-2xl font-bold text-[#0A2540] tracking-tight">{t("landing_patient_portal_title")}</h2>
               <p className="mt-1.5 text-slate-500 text-sm leading-relaxed">
-                Screen yourself or your child at home. Sign in with your phone number and start a new screening.
+                {t("landing_patient_portal_desc")}
               </p>
               <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-teal-700 group-hover:gap-3 transition-all">
-                Continue as patient <ChevronRight size={16} />
+                {t("landing_continue_patient")} <ChevronRight size={16} />
               </div>
               <div className="absolute top-0 right-0 text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
-                Phone + OTP
+                {t("landing_patient_portal_tag")}
               </div>
             </div>
           </motion.button>
@@ -152,26 +157,33 @@ export default function Landing() {
               <div className="w-14 h-14 rounded-2xl bg-white/10 text-teal-300 flex items-center justify-center group-hover:bg-teal-400 group-hover:text-[#0A2540] group-hover:scale-110 transition-all">
                 <Stethoscope size={26} />
               </div>
-              <h2 className="mt-6 text-2xl font-bold tracking-tight">Doctor Portal</h2>
+              <h2 className="mt-6 text-2xl font-bold tracking-tight">{t("landing_doctor_portal_title")}</h2>
               <p className="mt-1.5 text-slate-300 text-sm leading-relaxed">
-                Review screening results, access detailed clinical measurements, and manage patient diagnoses.
+                {t("landing_doctor_portal_desc")}
               </p>
               <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-teal-300 group-hover:gap-3 transition-all">
-                Continue as doctor <ChevronRight size={16} />
+                {t("landing_continue_doctor")} <ChevronRight size={16} />
               </div>
               <div className="absolute top-0 right-0 text-[10px] uppercase tracking-widest text-teal-300/70 font-semibold">
-                Hospital login
+                {t("landing_doctor_portal_tag")}
               </div>
             </div>
           </motion.button>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+          className="max-w-3xl mx-auto mt-10"
+        >
+          <MedicalDisclaimer />
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.5 }}
           className="mt-16 flex items-center justify-center gap-6 text-xs text-slate-500 font-medium flex-wrap"
         >
-          <span className="inline-flex items-center gap-1.5"><ShieldCheck size={14} /> Hospital-grade clinical thresholds</span>
-          <span className="inline-flex items-center gap-1.5"><Clock size={14} /> ~3 minutes per screening</span>
+          <span className="inline-flex items-center gap-1.5"><ShieldCheck size={14} /> {t("landing_footer_point_thresholds")}</span>
+          <span className="inline-flex items-center gap-1.5"><Clock size={14} /> {t("landing_footer_point_duration")}</span>
           <span className="inline-flex items-center gap-1.5"><Languages size={14} /> EN · தமிழ் · മലയാളം</span>
         </motion.div>
       </main>
@@ -179,7 +191,7 @@ export default function Landing() {
       {/* Footer byline */}
       <footer className="relative z-10 border-t border-slate-200 mt-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between text-xs text-slate-400">
-          <span>© 2026 AmbyoAI — Aravind Eye Hospital pilot</span>
+          <span>{t("landing_footer_copyright")}</span>
           <span className="font-mono">v2.1</span>
         </div>
       </footer>

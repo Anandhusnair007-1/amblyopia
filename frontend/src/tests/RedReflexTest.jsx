@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import TestStage from "@/tests/TestStage";
 import { speak } from "@/core/audio/AudioGuide";
 import { useI18n } from "@/core/i18n/translations";
-import WebRTCCamera from "@/core/camera/WebRTCCamera";
 
 function rgbToHsv(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -17,7 +16,7 @@ function rgbToHsv(r, g, b) {
   return { h, s: max === 0 ? 0 : d / max, v: max };
 }
 
-export default function RedReflexTest({ patient, onComplete }) {
+export default function RedReflexTest({ patient, onComplete, flowIndex, flowTotal, flowLabels }) {
   const { lang } = useI18n();
   const age = patient?.age ?? 8;
   const videoRef = useRef(null);
@@ -78,13 +77,16 @@ export default function RedReflexTest({ patient, onComplete }) {
   }, []);
 
   return (
-    <TestStage testId="red_reflex" distanceRange={[25, 35]} age={age} onFaceData={onFaceData}>
+    <TestStage
+      testId="red_reflex"
+      distanceRange={[25, 35]}
+      age={age}
+      onFaceData={onFaceData}
+      cameraOutRef={videoRef}
+      progress={flowTotal ? { index: flowIndex || 0, total: flowTotal, labels: flowLabels || [] } : null}
+    >
       {() => (
-        <div className="fixed inset-0 bg-white z-40 flex items-center justify-center">
-          {/* hidden video ref for pixel sampling */}
-          <div className="absolute opacity-0 pointer-events-none">
-            <WebRTCCamera onReady={(v) => (videoRef.current = v)} hidden />
-          </div>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-white">
           <div className="text-center">
             <div className="text-slate-600 uppercase tracking-[0.3em] text-xs font-bold">Capturing red reflex</div>
             <div className="mt-4 inline-block">

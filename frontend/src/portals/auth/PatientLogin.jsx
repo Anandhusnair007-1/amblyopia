@@ -7,10 +7,12 @@ import OfflineBadge from "@/components/ambyo/OfflineBadge";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { ArrowLeft, HeartPulse, Phone } from "lucide-react";
 import { motion } from "framer-motion";
+import { useI18n } from "@/core/i18n/translations";
 
 export default function PatientLogin() {
   const nav = useNavigate();
   const { patientRequestOtp, patientVerifyOtp } = useAuthStore();
+  const { t } = useI18n();
   const [step, setStep] = useState("phone"); // phone | otp
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -19,15 +21,15 @@ export default function PatientLogin() {
 
   const send = async (e) => {
     e?.preventDefault?.();
-    if (!/^\d{10}$/.test(phone)) return toast.error("Enter a valid 10-digit phone");
+    if (!/^\d{10}$/.test(phone)) return toast.error(t("patient_login_err_invalid_phone"));
     setLoading(true);
     try {
       const r = await patientRequestOtp(phone);
       setDemoOtp(r.demo_otp || "1234");
-      toast.success(`OTP sent (demo: ${r.demo_otp || "1234"})`);
+      toast.success(t("patient_login_otp_sent_demo", { otp: String(r.demo_otp || "1234") }));
       setStep("otp");
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Could not send OTP");
+      toast.error(e?.response?.data?.detail || t("patient_login_err_could_not_send_otp"));
     } finally { setLoading(false); }
   };
 
@@ -36,13 +38,13 @@ export default function PatientLogin() {
     try {
       const r = await patientVerifyOtp(phone, code);
       if (r.registered) {
-        toast.success("Welcome back!");
+        toast.success(t("welcome_back"));
         nav("/patient");
       } else {
         nav("/patient/register");
       }
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Invalid OTP");
+      toast.error(e?.response?.data?.detail || t("patient_login_err_invalid_otp"));
       setOtp("");
     } finally { setLoading(false); }
   };
@@ -54,27 +56,29 @@ export default function PatientLogin() {
       <div className="absolute inset-0 scan-grid opacity-30 pointer-events-none" />
       <header className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
         <button onClick={() => nav("/")} data-testid="landing-back" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100">
-          <ArrowLeft size={16} /> Home
+          <ArrowLeft size={16} /> {t("home")}
         </button>
         <div className="flex items-center gap-2">
           <OfflineBadge /><LanguageSwitcher />
         </div>
       </header>
 
-      <motion.div initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-xl p-8 sm:p-10">
+      <motion.div initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-xl sm:p-10">
         <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
           <HeartPulse size={22} />
         </div>
-        <h1 className="mt-5 text-3xl font-bold tracking-tight text-[#0A2540]">Patient sign in</h1>
+        <h1 className="mt-5 text-3xl font-bold tracking-tight text-[#0A2540]">{t("patient_sign_in")}</h1>
         <p className="mt-1 text-slate-500 text-sm">
-          {step === "phone" ? "Enter your mobile number to receive an OTP." : `We sent a 4-digit OTP to +91 ${phone}.`}
+          {step === "phone"
+            ? t("patient_login_phone_help")
+            : t("patient_login_otp_help", { phone: String(phone) })}
         </p>
 
         {step === "phone" ? (
           <form onSubmit={send} className="mt-8 space-y-5">
             <div>
-              <label className="text-xs uppercase tracking-widest font-semibold text-slate-500">Mobile number</label>
-              <div className="mt-2 flex items-center rounded-xl border border-slate-200 bg-slate-50 focus-within:border-[#0A2540] focus-within:ring-2 focus-within:ring-[#0A2540]/20 transition">
+              <label className="text-xs uppercase tracking-widest font-semibold text-slate-500">{t("mobile_number")}</label>
+              <div className="mt-2 flex items-center rounded-xl border border-input bg-background focus-within:border-[#0A2540] focus-within:ring-2 focus-within:ring-[#0A2540]/20 transition">
                 <div className="pl-3 flex items-center gap-1.5 text-slate-500"><Phone size={16} /><span className="text-sm font-semibold">+91</span></div>
                 <input
                   data-testid="phone-input"
@@ -83,7 +87,7 @@ export default function PatientLogin() {
                   autoFocus
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                  placeholder="10-digit number"
+                  placeholder={t("ten_digit_number")}
                   className="flex-1 bg-transparent px-3 py-3 text-lg font-mono tracking-wider focus:outline-none"
                 />
               </div>
@@ -91,8 +95,8 @@ export default function PatientLogin() {
             <button
               data-testid="send-otp"
               disabled={loading || phone.length !== 10}
-              className="w-full py-3 rounded-xl bg-[#0A2540] text-white font-semibold shadow-md hover:bg-[#0D2E52] transition-all disabled:opacity-40"
-            >{loading ? "Sending…" : "Send OTP"}</button>
+              className="w-full rounded-xl border border-transparent bg-[#0A2540] py-3 font-semibold text-white shadow-md transition-all hover:bg-[#0D2E52] disabled:opacity-40"
+            >{loading ? t("sending") : t("send_otp")}</button>
           </form>
         ) : (
           <div className="mt-8 space-y-5">
@@ -106,10 +110,18 @@ export default function PatientLogin() {
                 </InputOTPGroup>
               </InputOTP>
             </div>
-            {demoOtp && <p className="text-center text-xs text-slate-400">Demo OTP: <span className="font-mono font-semibold text-slate-600">{demoOtp}</span></p>}
+            {demoOtp && (
+              <p className="text-center text-xs text-slate-400">
+                {t("demo_otp")}: <span className="font-mono font-semibold text-slate-600">{demoOtp}</span>
+              </p>
+            )}
             <div className="flex items-center justify-between text-sm">
-              <button data-testid="change-phone" onClick={() => { setStep("phone"); setOtp(""); }} className="text-slate-500 hover:text-slate-700">Change number</button>
-              <button onClick={send} className="text-teal-700 font-semibold hover:underline">Resend OTP</button>
+              <button data-testid="change-phone" onClick={() => { setStep("phone"); setOtp(""); }} className="text-slate-500 hover:text-slate-700">
+                {t("change_number")}
+              </button>
+              <button onClick={send} className="text-teal-700 font-semibold hover:underline">
+                {t("resend_otp")}
+              </button>
             </div>
           </div>
         )}

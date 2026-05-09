@@ -6,59 +6,71 @@ import LanguageSwitcher from "@/components/ambyo/LanguageSwitcher";
 import OfflineBadge from "@/components/ambyo/OfflineBadge";
 import { ArrowLeft, Stethoscope, Mail, Lock, Eye as EyeIcon, EyeOff } from "lucide-react";
 import { motion } from "framer-motion";
+import { useI18n } from "@/core/i18n/translations";
+
+function staffHome(role) {
+  if (["super_admin", "hospital_admin", "admin"].includes(role)) return "/admin";
+  return "/doctor";
+}
+
+const fieldWrap =
+  "mt-2 flex items-center rounded-xl border border-input bg-background focus-within:border-teal-600 focus-within:ring-2 focus-within:ring-teal-600/20 transition";
 
 export default function DoctorLogin() {
   const nav = useNavigate();
   const { doctorLogin, token, user } = useAuthStore();
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { if (token && user?.role === "doctor") nav("/doctor"); }, [token, user, nav]);
+  useEffect(() => {
+    if (token && user?.role) nav(staffHome(user.role));
+  }, [token, user, nav]);
 
   const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await doctorLogin(email, password);
-      toast.success("Welcome, doctor");
-      nav("/doctor");
+      const u = await doctorLogin(email, password);
+      toast.success(t("signed_in"));
+      nav(staffHome(u?.role));
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Login failed");
+      toast.error(e?.response?.data?.detail || t("login_failed"));
     } finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen relative bg-[#0A0F1C] text-slate-100 flex items-center justify-center px-4 py-10 overflow-hidden">
-      <div className="absolute inset-0 scan-grid opacity-30 pointer-events-none" />
-      <div className="absolute -top-40 -right-40 w-[32rem] h-[32rem] rounded-full bg-teal-500/10 blur-3xl pointer-events-none" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-teal-50/30 px-4 py-10 text-foreground">
+      <div className="pointer-events-none absolute inset-0 scan-grid opacity-30" />
+      <div className="pointer-events-none absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full bg-teal-400/15 blur-3xl" />
 
-      <header className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
-        <button onClick={() => nav("/")} data-testid="landing-back" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-300 hover:bg-white/10">
-          <ArrowLeft size={16} /> Home
+      <header className="absolute left-4 right-4 top-4 z-10 flex items-center justify-between">
+        <button onClick={() => nav("/")} data-testid="landing-back" type="button" className="inline-flex items-center gap-1.5 rounded-xl border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground shadow-sm hover:bg-muted/50">
+          <ArrowLeft size={16} /> {t("home")}
         </button>
         <div className="flex items-center gap-2">
-          <OfflineBadge /><LanguageSwitcher variant="dark" />
+          <OfflineBadge /><LanguageSwitcher />
         </div>
       </header>
 
       <motion.form
         onSubmit={submit}
         initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-        className="relative w-full max-w-md bg-[#121A2F]/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-8 sm:p-10"
+        className="relative w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-2xl sm:p-10"
       >
-        <div className="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-300 flex items-center justify-center">
+        <div className="flex size-12 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
           <Stethoscope size={22} />
         </div>
-        <h1 className="mt-5 text-3xl font-bold tracking-tight text-white">Doctor sign in</h1>
-        <p className="mt-1 text-slate-400 text-sm">Aravind Eye Hospital — Clinical Review Portal</p>
+        <h1 className="mt-5 text-3xl font-bold tracking-tight text-[#0A2540]">{t("staff_sign_in")}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("staff_sign_in_subtitle")}</p>
 
         <div className="mt-8 space-y-5">
           <div>
-            <label className="text-xs uppercase tracking-widest font-semibold text-slate-400">Email</label>
-            <div className="mt-2 flex items-center rounded-xl border border-white/10 bg-white/5 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/20">
-              <div className="pl-3 text-slate-400"><Mail size={16} /></div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("email")}</label>
+            <div className={fieldWrap}>
+              <div className="pl-3 text-muted-foreground"><Mail size={16} /></div>
               <input
                 data-testid="doctor-email"
                 type="email"
@@ -66,25 +78,25 @@ export default function DoctorLogin() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="doctor@aravind.in"
-                className="flex-1 bg-transparent px-3 py-3 focus:outline-none text-white placeholder:text-slate-500"
+                className="flex-1 bg-transparent px-3 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none"
                 required
               />
             </div>
           </div>
           <div>
-            <label className="text-xs uppercase tracking-widest font-semibold text-slate-400">Password</label>
-            <div className="mt-2 flex items-center rounded-xl border border-white/10 bg-white/5 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/20">
-              <div className="pl-3 text-slate-400"><Lock size={16} /></div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("password")}</label>
+            <div className={fieldWrap}>
+              <div className="pl-3 text-muted-foreground"><Lock size={16} /></div>
               <input
                 data-testid="doctor-password"
                 type={showPw ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="flex-1 bg-transparent px-3 py-3 focus:outline-none text-white"
+                className="flex-1 bg-transparent px-3 py-3 text-foreground focus:outline-none"
                 required
               />
-              <button type="button" onClick={() => setShowPw((s) => !s)} className="px-3 text-slate-400 hover:text-slate-200">
+              <button type="button" onClick={() => setShowPw((s) => !s)} className="px-3 text-muted-foreground hover:text-foreground">
                 {showPw ? <EyeOff size={16} /> : <EyeIcon size={16} />}
               </button>
             </div>
@@ -92,12 +104,13 @@ export default function DoctorLogin() {
           <button
             data-testid="doctor-submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl bg-teal-500 text-[#0A0F1C] font-bold shadow-md hover:bg-teal-400 transition-all disabled:opacity-40"
-          >{loading ? "Signing in…" : "Sign in"}</button>
+            className="w-full rounded-xl border border-transparent bg-teal-600 py-3 font-bold text-white shadow-md transition-all hover:bg-teal-700 disabled:opacity-40"
+          >{loading ? t("signing_in") : t("sign_in")}</button>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Demo: <span className="font-mono text-slate-300">doctor@aravind.in</span> / <span className="font-mono text-slate-300">aravind2026</span>
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          {t("demo")}: <span className="font-mono text-foreground">doctor@aravind.in</span> /{" "}
+          <span className="font-mono text-foreground">aravind2026</span>
         </p>
       </motion.form>
     </div>

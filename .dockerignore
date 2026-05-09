@@ -1,0 +1,42 @@
+# Git and IDE
+.git
+.gitignore
+.cursor
+
+# Secrets — never bake into images
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Python
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+venv
+.venv
+env
+
+# Node
+**/node_modules
+frontend/build
+frontend/coverage
+
+# Large / sensitive artifacts (do not ship in images)
+backups/
+*.dump
+*.archive
+**/models/*.h5
+**/models/*.keras
+**/models/**/*.keras
+backend/models/
+frontend/public/models/
+
+# Datasets and clinical exports
+ambyo_dataset_clean/
+ambyo_dataset_model/
+extracted_xlsx/
+*.xlsx
+
+# Logs
+*.log

@@ -1,13 +1,19 @@
 // Shared "stage" wrapper used by every test.
 // Handles: camera, face detection, distance pill, face-positioning gate, audio narration,
 //          3-2-1 countdown, and reveals children only when "ready".
+//
+// Layer stack:
+//   z-10 — camera feed
+//   z-20 — test UI, face guide, distance HUD, intro controls
+//   z-50 — viewport countdown overlay (pointer-events-none so top nav stays clickable)
 import { useEffect, useRef, useState, useCallback } from "react";
 import WebRTCCamera from "@/core/camera/WebRTCCamera";
-import { loadLandmarker, detectFace, estimateDistanceCm, gazeRatios } from "@/core/camera/MediaPipeSetup";
+import { loadLandmarker, detectFace, estimateDistanceCm, gazeRatios, normalizeAgeYears } from "@/core/camera/MediaPipeSetup";
 import FaceGuide from "@/components/ambyo/FaceGuide";
 import CountdownOverlay from "@/components/ambyo/CountdownOverlay";
 import { speak, NARRATION, useAudioStore } from "@/core/audio/AudioGuide";
 import { useI18n } from "@/core/i18n/translations";
+import TestProgressBar from "@/components/ambyo/TestProgressBar";
 
 /**
  * Props:
@@ -17,6 +23,7 @@ import { useI18n } from "@/core/i18n/translations";
  *  - requireCamera: bool (default true). For prism we skip camera entirely.
  *  - skipGate: bool — if true, reveal children immediately (no positioning gate / countdown)
  *  - onFaceData: (face, gaze) => void  — called every frame when face detected
+ *  - cameraOutRef: optional ref object; .current is set to the HTMLVideoElement when the stream is ready (for tests that need the same camera as the stage, e.g. red reflex sampling).
  *  - children: (opts) => ReactNode
  *      opts = { ready, triggerCountdown, distance, cameraReady }
  */
@@ -27,20 +34,31 @@ export default function TestStage({
   requireCamera = true,
   skipGate = false,
   onFaceData,
+  cameraOutRef,
+  progress,
   children,
 }) {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const { muted } = useAudioStore();
   const [landmarker, setLandmarker] = useState(null);
+  const [landmarkerUnavailable, setLandmarkerUnavailable] = useState(false);
   const [distance, setDistance] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [phase, setPhase] = useState(requireCamera && !skipGate ? "intro" : "active"); // intro | countdown | active
   const [goodHoldMs, setGoodHoldMs] = useState(0);
   const lastGoodTsRef = useRef(null);
   const introSpokenRef = useRef(false);
+  const [faceDetected, setFaceDetected] = useState(false);
 
   useEffect(() => {
-    if (requireCamera) loadLandmarker().then(setLandmarker);
+    if (!requireCamera) {
+      setLandmarkerUnavailable(false);
+      return;
+    }
+    loadLandmarker().then((lm) => {
+      setLandmarker(lm);
+      setLandmarkerUnavailable(!lm);
+    });
   }, [requireCamera]);
 
   // Speak the intro narration once per test
@@ -56,12 +74,18 @@ export default function TestStage({
     if (!landmarker) return;
     const face = detectFace(landmarker, video, ts);
     if (!face) {
+      setFaceDetected(false);
       setDistance(null);
       lastGoodTsRef.current = null;
       setGoodHoldMs(0);
       return;
     }
-    const d = estimateDistanceCm({ faceBoxPx: face.faceBoxPx, imageWidthPx: face.imageWidthPx, ageYears: age });
+    setFaceDetected(true);
+    const d = estimateDistanceCm({
+      faceBoxPx: face.faceBoxPx,
+      imageWidthPx: face.imageWidthPx,
+      ageYears: normalizeAgeYears(age, 8),
+    });
     setDistance(d);
     if (onFaceData) {
       const g = gazeRatios(face.landmarks);
@@ -86,52 +110,108 @@ export default function TestStage({
     if (goodHoldMs >= 1200) setPhase("countdown");
   }, [phase, goodHoldMs]);
 
-  const triggerCountdown = () => setPhase("countdown");
+  const triggerCountdown = useCallback(() => setPhase("countdown"), []);
 
-  const countdownDone = () => setPhase("active");
+  const countdownDone = useCallback(() => setPhase("active"), []);
 
   const ready = phase === "active";
 
   return (
-    <div className="relative flex-1 flex flex-col">
+    <section className="relative z-20 h-full min-h-0 overflow-hidden">
       {requireCamera && (
         <WebRTCCamera
-          onReady={() => setCameraReady(true)}
+          onReady={(el) => {
+            if (cameraOutRef) cameraOutRef.current = el;
+            setCameraReady(true);
+          }}
           onFrame={onFrame}
           hidden={phase === "active"}
-          className="absolute inset-0 w-full h-full object-cover opacity-40"
+          className={`absolute inset-0 z-10 h-full w-full ${
+            phase !== "active" ? "rounded-none" : "p-4 sm:p-6"
+          }`}
           mirrored
         />
       )}
 
+      {/* Progress stepper (top) */}
+      {progress && (
+        <div className="pointer-events-none absolute left-0 right-0 top-0 z-30 px-4 pt-[calc(var(--test-topbar-height,5.5rem)+0.75rem)] sm:px-6">
+          <div className="mx-auto w-full max-w-4xl">
+            <div className="rounded-2xl border border-white/10 bg-[#0A0F1C]/55 px-4 py-3 shadow-lg backdrop-blur-xl">
+              <TestProgressBar total={progress.total} index={progress.index} labels={progress.labels} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {requireCamera && phase === "intro" && (
         <>
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0A0F1C]/95 via-[#0A0F1C]/80 to-[#0A0F1C]" />
+          <div className="pointer-events-none absolute inset-0 z-20 bg-gradient-to-b from-[#0A0F1C]/85 via-[#0A0F1C]/20 to-[#0A0F1C]/85" />
           <FaceGuide distanceCm={distance} range={distanceRange} visible />
-          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 text-center px-6">
-            <p className="text-xs uppercase tracking-[0.3em] text-teal-300 font-bold">{testLabel(testId)}</p>
-            <p className="mt-2 text-slate-300 text-sm">
-              {cameraReady ? "Position your face inside the oval. Test will start automatically." : "Starting camera…"}
-            </p>
-            <button
-              data-testid="stage-start-manual"
-              onClick={triggerCountdown}
-              className="mt-4 px-5 py-2.5 rounded-xl bg-teal-500 text-[#0A0F1C] font-bold shadow-md hover:bg-teal-400 transition-all text-sm"
-            >Start now</button>
+          {/* Bottom sheet instructions */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-40 bg-gradient-to-t from-[#0A0F1C]/95 via-[#0A0F1C]/70 to-transparent" />
+          <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+            <div className="mx-auto w-full max-w-lg">
+              <div className="rounded-3xl border border-white/10 bg-[#0A0F1C]/80 p-5 shadow-2xl backdrop-blur-xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-teal-300">
+                      {testLabel(testId, t)}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-200">
+                      {!cameraReady
+                        ? t("starting_camera")
+                        : landmarkerUnavailable
+                          ? t("face_assist_unavailable")
+                          : t("position_face_inside_oval")}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-400">
+                      {t("status")}:{" "}
+                      <span className={faceDetected ? "text-emerald-300" : "text-amber-300"}>
+                        {faceDetected ? t("face_detected") : t("no_face_detected")}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    data-testid="stage-start-manual"
+                    onClick={triggerCountdown}
+                    className="shrink-0 rounded-2xl bg-teal-500 px-5 py-3 text-sm font-extrabold text-[#0A0F1C] shadow-md hover:bg-teal-400 transition-all"
+                  >
+                    {t("start")}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </>
       )}
 
       {phase === "countdown" && (
-        <CountdownOverlay from={3} lang={lang} onDone={countdownDone} label={testLabel(testId)} />
+        <CountdownOverlay from={3} lang={lang} onDone={countdownDone} label={testLabel(testId, t)} viewport="window" />
       )}
 
-      {ready && children?.({ ready, distance, cameraReady, muted })}
+      {ready && (
+        <div className="relative z-20 flex h-full min-h-0 flex-col overflow-hidden">
+          {/* Camera framing polish (CSS only) */}
+          {requireCamera && (
+            <div className="pointer-events-none absolute inset-0 z-10 p-4 sm:p-6">
+              <div
+                className={`h-full w-full rounded-[28px] border shadow-[0_0_0_1px_rgba(255,255,255,0.06)] transition-all ${
+                  faceDetected
+                    ? "border-emerald-400/40 shadow-[0_0_40px_4px_rgba(16,185,129,0.18)]"
+                    : "border-red-400/35 shadow-[0_0_40px_4px_rgba(239,68,68,0.14)]"
+                }`}
+              />
+            </div>
+          )}
+          {children?.({ ready, distance, cameraReady, muted })}
+        </div>
+      )}
 
-      {/* Distance pill — visible during active phase too (mini) */}
+      {/* Distance pill — scoped to stage viewport (not fixed to window) */}
       {ready && requireCamera && distance != null && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border shadow-lg backdrop-blur-xl bg-[#0A0F1C]/60 border-white/10 text-slate-200">
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 sm:top-4">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0A0F1C]/60 px-3 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur-xl">
             <span className={`w-1.5 h-1.5 rounded-full ${
               distance < distanceRange[0] ? "bg-red-400" : distance > distanceRange[1] ? "bg-amber-400" : "bg-emerald-400"
             }`} />
@@ -139,17 +219,19 @@ export default function TestStage({
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-function testLabel(id) {
-  return {
-    visual_acuity: "Visual Acuity",
-    gaze: "Gaze Detection",
-    hirschberg: "Hirschberg",
-    prism: "Prism Diopter",
-    titmus: "Titmus Stereo",
-    red_reflex: "Red Reflex",
-  }[id] || id;
+function testLabel(id, t) {
+  const key = {
+    visual_acuity: "test_visual_acuity",
+    gaze: "test_gaze",
+    hirschberg: "test_hirschberg",
+    prism: "test_prism",
+    titmus: "test_titmus",
+    red_reflex: "test_red_reflex",
+    heidelberg: "test_heidelberg_proxy",
+  }[id];
+  return key ? t(key) : id;
 }

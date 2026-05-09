@@ -138,18 +138,46 @@ def registered_patient(s):
     return {"token": reg["token"], "id": reg["user"]["id"], "phone": ph}
 
 
+def _consent_toggles(**overrides):
+    base = {
+        "camera": True,
+        "storage": True,
+        "doctor_share": True,
+        "referral_communication": True,
+        "research": False,
+        "product_improvement": False,
+    }
+    base.update(overrides)
+    return base
+
+
 class TestConsent:
     def test_consent_all_true(self, s, registered_patient):
-        r = s.post(f"{API}/consent", headers=hdr(registered_patient["token"]),
-                   json={"patient_id": registered_patient["id"],
-                         "toggles": {"camera": True, "storage": True, "research": True, "doctor_share": True}})
+        r = s.post(
+            f"{API}/consent",
+            headers=hdr(registered_patient["token"]),
+            json={"patient_id": registered_patient["id"], "toggles": _consent_toggles()},
+        )
         assert r.status_code == 200
         assert r.json()["ok"] is True
 
-    def test_consent_one_false_400(self, s, registered_patient):
-        r = s.post(f"{API}/consent", headers=hdr(registered_patient["token"]),
-                   json={"patient_id": registered_patient["id"],
-                         "toggles": {"camera": True, "storage": True, "research": False, "doctor_share": True}})
+    def test_consent_research_optional_ok(self, s, registered_patient):
+        r = s.post(
+            f"{API}/consent",
+            headers=hdr(registered_patient["token"]),
+            json={"patient_id": registered_patient["id"], "toggles": _consent_toggles(research=False)},
+        )
+        assert r.status_code == 200
+
+    def test_consent_required_missing_400(self, s, registered_patient):
+        r = s.post(
+            f"{API}/consent",
+            headers=hdr(registered_patient["token"]),
+            json={
+                "patient_id": registered_patient["id"],
+                "toggles": _consent_toggles(referral_communication=False),
+            },
+        )
         assert r.status_code == 400
 
     def test_consent_other_patient_403(self, s, registered_patient):
@@ -160,9 +188,11 @@ class TestConsent:
                       json={"name": "TEST_Other", "date_of_birth": "2020-02-02"}).json()
         other_id = reg2["user"]["id"]
         # First patient tries to save consent for second — expect 403
-        r = s.post(f"{API}/consent", headers=hdr(registered_patient["token"]),
-                   json={"patient_id": other_id,
-                         "toggles": {"camera": True, "storage": True, "research": True, "doctor_share": True}})
+        r = s.post(
+            f"{API}/consent",
+            headers=hdr(registered_patient["token"]),
+            json={"patient_id": other_id, "toggles": _consent_toggles()},
+        )
         assert r.status_code == 403
 
 
@@ -242,7 +272,16 @@ class TestDoctorEndpoints:
         r = s.get(f"{API}/doctor/stats", headers=hdr(doctor_token))
         assert r.status_code == 200
         d = r.json()
-        for k in ["total_patients", "completed_sessions", "urgent_cases", "today_sessions", "pending_review"]:
+        for k in [
+            "total_patients",
+            "completed_sessions",
+            "urgent_cases",
+            "today_sessions",
+            "pending_review",
+            "urgent_unreviewed",
+            "reviewed_today",
+            "followups_due",
+        ]:
             assert k in d and isinstance(d[k], int)
         assert d["urgent_cases"] >= 1
         assert d["pending_review"] >= 1

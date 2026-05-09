@@ -2,76 +2,62 @@
 node_modules/
 __pycache__/
 *.pyc
-*.pyo
-.Python
 env/
 venv/
 .venv/
+.venv-eye/
 
-# Build
+# Environment
+.env
+.env.*
+*.env
+!backend/.env.production.example
+!frontend/.env.production.example
+
+# PII migration backups (may contain plaintext)
+backups/
+*.dump
+*.archive
+*.archive.gz
+patients_backup*.json
+backend/patients_backup*.json
+
+# AI Models & Weights (SECURITY: DO NOT COMMIT)
+*.h5
+*.keras
+*.pkl
+*.tflite
+backend/models/
+!backend/models/.gitkeep
+frontend/public/models/
+
+# Local artifacts
+Image_Summary_With_Embedded_Images1(Cropped Results).csv
+=
+CACHED
+[[]internal]
+reading
+transferring
+
+# Clinical Datasets (SECURITY: DO NOT COMMIT PHI)
+ambyo_dataset_clean/
+ambyo_dataset_model/
+extracted_xlsx/
+et_doctor_review_pack/
+Image_Summary_With_Embedded_Images1.xlsx
+
+# TLS material for production nginx mounts (see docker-compose.production.yml)
+ssl/
+
+# Build & System
 build/
 dist/
-*.egg-info/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Env files with secrets — but keep .env.example
-.env
-.env.local
-.env.production
-backend/.env
-frontend/.env
-
-# Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Testing
-.coverage
-.pytest_cache/
-htmlcov/
-
-# MediaPipe local models (large)
-frontend/public/models/*.task
-frontend/public/models/*.tflite
-
-# Backend local data
-backend/local_data/
-backend/*.db
-
-# Supervisor / runtime
-supervisord.log
-supervisord.pid
-
-# Playwright
-test-results/
-playwright-report/
-frontend/node_modules/.cache/default-development/19.pack
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
+# Docker host-mounted logs (keep logs/README.md)
+logs/mongo/
+logs/backend/
+logs/nginx/
+logs/docker/
+!logs/README.md

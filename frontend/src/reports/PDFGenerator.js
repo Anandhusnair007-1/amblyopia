@@ -1,7 +1,14 @@
 import jsPDF from "jspdf";
 
 // Minimal 6-page PDF report (no external fonts; uses jsPDF defaults)
-export function generateReport({ patient, session, results, prediction, hospital = "Aravind Eye Hospital, Coimbatore" }) {
+export function generateReport({
+  patient,
+  session,
+  results,
+  prediction,
+  hospital = "Aravind Eye Hospital, Coimbatore",
+  strabismus_ai = null,
+}) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const M = 48;
@@ -79,6 +86,30 @@ export function generateReport({ patient, session, results, prediction, hospital
   y += 10;
   h2("Clinical Findings");
   (prediction?.findings || []).forEach((f) => para("• " + f));
+
+  if (strabismus_ai && strabismus_ai.risk && strabismus_ai.risk !== "normal") {
+    y += 14;
+    h2("AI Eye Analysis");
+    if (strabismus_ai.condition) {
+      kv("Condition code", String(strabismus_ai.condition));
+    }
+    kv("AI risk", String(strabismus_ai.risk).toUpperCase());
+    if (typeof strabismus_ai.confidence === "number") {
+      kv("Confidence", `${(strabismus_ai.confidence * 100).toFixed(0)}%`);
+    }
+    if (strabismus_ai.recommendation) {
+      para(strabismus_ai.recommendation);
+    }
+    if (strabismus_ai.all_scores && typeof strabismus_ai.all_scores === "object") {
+      kv(
+        "Class scores",
+        Object.entries(strabismus_ai.all_scores)
+          .map(([k, v]) => `${k}: ${Number(v).toFixed(2)}`)
+          .join(", ")
+      );
+    }
+    para("AI-assisted screening. Not a medical diagnosis.");
+  }
 
   // Page 3-5 — Per-test details
   const byName = Object.fromEntries((results || []).map((r) => [r.test_name, r]));

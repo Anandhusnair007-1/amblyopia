@@ -17,7 +17,7 @@ const DOTS = [
 ];
 const FRAMES_PER_DOT = 10;
 
-export default function GazeTest({ patient, onComplete }) {
+export default function GazeTest({ patient, onComplete, flowIndex, flowTotal, flowLabels }) {
   const { lang } = useI18n();
   const age = patient?.age ?? 8;
   const [step, setStep] = useState(0);
@@ -75,11 +75,17 @@ export default function GazeTest({ patient, onComplete }) {
   const dot = DOTS[step];
 
   return (
-    <TestStage testId="gaze" distanceRange={[40, 60]} age={age} onFaceData={onFaceData}>
+    <TestStage
+      testId="gaze"
+      distanceRange={[40, 60]}
+      age={age}
+      onFaceData={onFaceData}
+      progress={flowTotal ? { index: flowIndex || 0, total: flowTotal, labels: flowLabels || [] } : null}
+    >
       {() => (
-        <div className="relative flex-1">
-          <div className="absolute top-24 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-            <p className="text-xs uppercase tracking-[0.3em] text-sky-400 font-bold">Gaze · {step + 1} / 9</p>
+        <div className="relative min-h-0 flex-1">
+          <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 text-center sm:top-20">
+            <p className="text-xs font-semibold tracking-wide text-sky-400">Gaze · {step + 1} / 9</p>
             <p className="mt-1 text-slate-300 text-sm">Follow the dot with your eyes only</p>
           </div>
           <AnimatePresence mode="wait">

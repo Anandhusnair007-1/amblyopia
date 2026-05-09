@@ -30,12 +30,13 @@ export default function FaceGuide({
   const delta = !noFace ? (good ? 0 : tooClose ? distanceCm - min : distanceCm - max) : null;
 
   return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
       {/* Pulsing face oval */}
       <motion.svg
-        width="min(58vh, 400px)" height="min(75vh, 520px)" viewBox="0 0 400 520"
+        viewBox="0 0 400 520"
+        preserveAspectRatio="xMidYMid meet"
         initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-        className="overflow-visible"
+        className="h-auto max-h-[min(75dvh,520px)] w-[min(90vw,400px)] overflow-visible"
       >
         <defs>
           <linearGradient id="faceStroke" x1="0" x2="0" y1="0" y2="1">

@@ -37,6 +37,14 @@ let webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
+      // fork-ts-checker + nested ajv-keywords breaks under npm hoisting (formats.date undefined).
+      // Production build does not need the parallel typecheck plugin; `tsc` can be run in CI separately.
+      if (process.env.NODE_ENV === "production") {
+        webpackConfig.plugins = (webpackConfig.plugins || []).filter((plugin) => {
+          const n = plugin?.constructor?.name;
+          return n !== "ForkTsCheckerWebpackPlugin";
+        });
+      }
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
@@ -61,6 +69,15 @@ let webpackConfig = {
 };
 
 webpackConfig.devServer = (devServerConfig) => {
+  // Same-origin /api when REACT_APP_BACKEND_URL is unset (matches Docker nginx + local backend).
+  const proxyTarget = process.env.REACT_APP_DEV_PROXY_TARGET || "http://127.0.0.1:8001";
+  if (!process.env.REACT_APP_BACKEND_URL || String(process.env.REACT_APP_BACKEND_URL).trim() === "") {
+    devServerConfig.proxy = {
+      ...devServerConfig.proxy,
+      "/api": { target: proxyTarget, changeOrigin: true },
+    };
+  }
+
   // Add health check endpoints if enabled
   if (config.enableHealthCheck && setupHealthEndpoints && healthPluginInstance) {
     const originalSetupMiddlewares = devServerConfig.setupMiddlewares;

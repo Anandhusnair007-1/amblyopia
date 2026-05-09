@@ -8,11 +8,18 @@ html, body, #root {
   height: 100%;
 }
 
+html {
+  /* Prevent horizontal layout shift when pages toggle scrollbars (CLS fix). */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
   background: #F8FAFC;
   color: #0F172A;
 }

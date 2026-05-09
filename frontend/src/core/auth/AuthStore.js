@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import axios from "axios";
+import { getApiBasePath } from "@/core/apiBase";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API = getApiBasePath();
 const KEY = "ambyoai.auth";
 
 const setAuthHeader = (token) => {
@@ -33,6 +34,15 @@ export const useAuthStore = create((set, get) => ({
     setAuthHeader(token);
     localStorage.setItem(KEY, JSON.stringify({ token, user }));
     set({ token, user });
+  },
+
+  /** Merge into stored user (e.g. after PATCH /patient/me) and persist session. */
+  patchUserPartial: (partialUser) => {
+    const { token, user } = get();
+    if (!token || !user) return;
+    const next = { ...user, ...partialUser };
+    localStorage.setItem(KEY, JSON.stringify({ token, user: next }));
+    set({ user: next });
   },
 
   patientRequestOtp: async (phone) => {

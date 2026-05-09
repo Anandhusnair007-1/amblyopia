@@ -28,8 +28,8 @@ function TumblingE({ dir = "up", size = 220, color = "#FFFFFF" }) {
 
 const LEA = [{ e: "🍎" }, { e: "🏠" }, { e: "●" }, { e: "■" }];
 
-export default function VisualAcuityTest({ patient, onComplete }) {
-  const { lang } = useI18n();
+export default function VisualAcuityTest({ patient, onComplete, flowIndex, flowTotal, flowLabels }) {
+  const { lang, t } = useI18n();
   const age = patient?.age ?? 8;
   const profile = age <= 4 ? "A" : age <= 7 ? "B" : "C";
   const [lineIdx, setLineIdx] = useState(0);
@@ -95,13 +95,20 @@ export default function VisualAcuityTest({ patient, onComplete }) {
   const line = LINES[lineIdx];
 
   return (
-    <TestStage testId="visual_acuity" distanceRange={[35, 45]} age={age}>
+    <TestStage
+      testId="visual_acuity"
+      distanceRange={[35, 45]}
+      age={age}
+      progress={flowTotal ? { index: flowIndex || 0, total: flowTotal, labels: flowLabels || [] } : null}
+    >
       {({ ready }) => (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-24 relative">
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-24">
           <div className="absolute top-24 left-1/2 -translate-x-1/2 text-center">
-            <p className="text-xs uppercase tracking-[0.3em] text-sky-400 font-bold">Visual Acuity · 6/{line.den}</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-sky-400 font-bold">
+              {t("visual_acuity_line", { den: String(line.den) })}
+            </p>
             <h2 className="mt-2 text-xl sm:text-2xl font-bold text-white">
-              {profile === "A" ? "Point to the picture" : "Which way is the E pointing?"}
+              {profile === "A" ? t("visual_acuity_prompt_picture") : t("visual_acuity_prompt_e")}
             </h2>
           </div>
 

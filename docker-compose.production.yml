@@ -1,0 +1,20 @@
+# Public HTTPS on ambyoai.com — use with base compose:
+#   cp compose.env.example .env   # then set FRONTEND_* for public 80/443 (see file comments)
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+#
+# Before first start:
+#   1. Obtain TLS certs (Let's Encrypt). Copy or symlink to:
+#        ssl/ambyoai.com/fullchain.pem
+#        ssl/ambyoai.com/privkey.pem
+#   2. In backend/.env set CORS_ORIGINS=https://ambyoai.com,https://www.ambyoai.com
+#   3. Build frontend with empty REACT_APP_BACKEND_URL (default) so the SPA uses same-origin /api.
+#   4. For production, remove or comment out mongo: ports: in docker-compose.yml so 27017 is not on the public internet.
+
+services:
+  frontend:
+    volumes:
+      - ./ssl/ambyoai.com/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - ./ssl/ambyoai.com/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      - ./nginx/ambyoai.com.conf:/etc/nginx/conf.d/default.conf:ro
+      # Optional: mkdir -p certbot/www — used by certbot --webroot for HTTP-01 renewals
+      - ./certbot/www:/var/www/certbot:ro

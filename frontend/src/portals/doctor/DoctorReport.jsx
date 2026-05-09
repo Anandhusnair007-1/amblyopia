@@ -5,18 +5,30 @@ import { toast } from "sonner";
 import ScoreRing from "@/components/ambyo/ScoreRing";
 import RiskBadge from "@/components/ambyo/RiskBadge";
 import UrgentBanner from "@/components/ambyo/UrgentBanner";
-import OfflineBadge from "@/components/ambyo/OfflineBadge";
-import LanguageSwitcher from "@/components/ambyo/LanguageSwitcher";
+import PageHeader from "@/components/shell/PageHeader";
+import DashboardCard from "@/components/shell/DashboardCard";
 import { generateReport, generateReferralLetter } from "@/reports/PDFGenerator";
-import { ArrowLeft, FileDown, Mail, Save, ChevronDown, ChevronUp, Activity, Microscope } from "lucide-react";
+import MedicalDisclaimer from "@/components/MedicalDisclaimer";
+import { ArrowLeft, FileDown, Mail, Save, ChevronDown, ChevronUp, Activity, Microscope, Info } from "lucide-react";
 import { motion } from "framer-motion";
+import PatientContextBar from "@/components/clinical/PatientContextBar";
+import AuditActionNotice from "@/components/clinical/AuditActionNotice";
+import { maskPhone } from "@/lib/maskPhone";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const SEV_STYLE = {
-  normal: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  mild: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  moderate: "bg-orange-500/15 text-orange-300 border-orange-500/30",
-  high: "bg-orange-500/20 text-orange-200 border-orange-500/40",
-  urgent: "bg-red-500/15 text-red-300 border-red-500/40 animate-pulse",
+  normal: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  mild: "bg-amber-50 text-amber-900 border-amber-200",
+  moderate: "bg-orange-50 text-orange-900 border-orange-200",
+  high: "bg-orange-50 text-orange-950 border-orange-300",
+  urgent: "bg-red-50 text-red-800 border-red-300 animate-pulse",
 };
 
 const TESTS = {
@@ -26,35 +38,148 @@ const TESTS = {
   prism: "Prism Diopter",
   titmus: "Titmus Stereo",
   red_reflex: "Red Reflex",
+  heidelberg: "Heidelberg (Proxy)",
 };
+
+function followUpDateIsPast(value) {
+  if (!value) return false;
+  const selected = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(selected.getTime())) return true;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return selected < today;
+}
+
+const STRABISMUS_SCORE_ORDER = ["Normal", "XT", "ET", "HT"];
+
+function AIStrabismusDoctorCard({ strabismus_ai: sa }) {
+  const confidence = typeof sa.confidence === "number" && Number.isFinite(sa.confidence)
+    ? Math.min(1, Math.max(0, sa.confidence))
+    : null;
+  const scores = sa.all_scores && typeof sa.all_scores === "object" ? sa.all_scores : {};
+  const condition = sa.condition ?? "—";
+  const aiRisk = sa.risk || "normal";
+
+  return (
+    <div
+      data-testid="doctor-strabismus-ai-card"
+      className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+    >
+      <div className="border-b border-border bg-muted/40 px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl leading-none" aria-hidden>
+              🤖
+            </span>
+            <div>
+              <h3 className="text-base font-bold tracking-tight text-[#0A2540]">AI Strabismus Screening</h3>
+              <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                Model: {sa.model_version || "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-5 px-5 py-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Condition:</span>
+          <span className="inline-flex items-center rounded-md border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-bold text-teal-900">
+            {condition}
+          </span>
+        </div>
+
+        {confidence !== null && (
+          <div>
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Confidence</span>
+              <span className="font-mono text-teal-800">{(confidence * 100).toFixed(0)}%</span>
+            </div>
+            <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-teal-600 transition-[width]"
+                style={{ width: `${confidence * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Risk:</span>
+          <RiskBadge level={aiRisk} />
+        </div>
+
+        {sa.recommendation && (
+          <p className="text-sm leading-relaxed text-foreground/90 border-t border-border pt-4">
+            {sa.recommendation}
+          </p>
+        )}
+
+        <div className="border-t border-border pt-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">All Class Scores</p>
+          <div className="mt-3 space-y-3">
+            {STRABISMUS_SCORE_ORDER.map((label) => {
+              const raw = scores[label];
+              const val = typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0;
+              const pct = Math.round(val * 100);
+              const isPredicted = condition !== "—" && label === condition;
+              return (
+                <div
+                  key={label}
+                  className={`rounded-lg px-3 py-2 ${
+                    isPredicted ? "bg-teal-50 ring-2 ring-teal-500/60" : "bg-muted/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className={`font-mono font-semibold ${isPredicted ? "text-teal-900" : "text-foreground"}`}>
+                      {label}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">{pct}%</span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/80 dark:bg-background">
+                    <div
+                      className={`h-full rounded-full ${isPredicted ? "bg-teal-600" : "bg-slate-400/70"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ResultCard({ name, result }) {
   const [open, setOpen] = useState(false);
+  const base = "border border-input bg-background text-foreground rounded-xl p-4";
   if (!result) {
     return (
-      <div className="bg-[#121A2F] border border-white/10 rounded-xl p-4">
-        <div className="text-xs uppercase tracking-widest text-slate-400 font-bold">{TESTS[name] || name}</div>
-        <div className="mt-2 text-sm text-slate-500">Not performed</div>
+      <div className={base}>
+        <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold">{TESTS[name] || name}</div>
+        <div className="mt-2 text-sm text-muted-foreground">Not performed</div>
       </div>
     );
   }
   const details = result.details || {};
   const skipped = details.skipped;
   return (
-    <div className="bg-[#121A2F] border border-white/10 rounded-xl p-4">
+    <div className={base}>
       <div className="flex items-center justify-between">
-        <div className="text-xs uppercase tracking-widest text-slate-400 font-bold">{TESTS[name] || name}</div>
-        {skipped && <span className="text-xs text-amber-300 font-semibold">SKIPPED</span>}
+        <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold">{TESTS[name] || name}</div>
+        {skipped && <span className="text-xs text-amber-700 font-semibold">SKIPPED</span>}
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-        <div><span className="text-slate-500">Raw:</span> <span className="font-mono text-white">{Number(result.raw_score).toFixed(2)}</span></div>
-        <div><span className="text-slate-500">Norm:</span> <span className="font-mono text-white">{Number(result.normalized_score).toFixed(3)}</span></div>
+        <div><span className="text-muted-foreground">Raw:</span> <span className="font-mono font-medium">{Number(result.raw_score).toFixed(2)}</span></div>
+        <div><span className="text-muted-foreground">Norm:</span> <span className="font-mono font-medium">{Number(result.normalized_score).toFixed(3)}</span></div>
       </div>
-      <button onClick={() => setOpen(!open)} className="mt-3 inline-flex items-center gap-1 text-xs text-teal-300 hover:text-teal-200">
+      <button type="button" onClick={() => setOpen(!open)} className="mt-3 inline-flex items-center gap-1 text-xs text-teal-700 hover:text-teal-800 font-medium">
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {open ? "Hide" : "Show"} raw details
       </button>
       {open && (
-        <pre className="mt-2 text-[11px] text-slate-300 bg-black/30 rounded-md p-2 overflow-x-auto font-mono">
+        <pre className="mt-2 text-[11px] text-foreground/80 bg-muted/50 border border-border rounded-md p-2 overflow-x-auto font-mono">
 {JSON.stringify(details, null, 2)}
         </pre>
       )}
@@ -67,233 +192,436 @@ export default function DoctorReport() {
   const { sessionId } = useParams();
   const [data, setData] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ diagnosis: "", treatment: "", risk_label: "", follow_up_date: "", referred_to: "" });
+  const [form, setForm] = useState({
+    diagnosis: "",
+    treatment: "",
+    risk_label: "",
+    follow_up_date: "",
+    referred_to: "",
+    override_reason: "",
+  });
+  const [wrongPatientOpen, setWrongPatientOpen] = useState(false);
+  const [patientVerified, setPatientVerified] = useState(false);
+  const [exportConfirm, setExportConfirm] = useState(null);
 
   const load = async () => {
     const r = await api.get(`/sessions/${sessionId}`);
     setData(r.data);
-    if (r.data.diagnosis) setForm({
-      diagnosis: r.data.diagnosis.diagnosis || "",
-      treatment: r.data.diagnosis.treatment || "",
-      risk_label: r.data.diagnosis.risk_label || "",
-      follow_up_date: r.data.diagnosis.follow_up_date || "",
-      referred_to: r.data.diagnosis.referred_to || "",
-    });
+    if (r.data.diagnosis) {
+      setForm({
+        diagnosis: r.data.diagnosis.diagnosis || "",
+        treatment: r.data.diagnosis.treatment || "",
+        risk_label: r.data.diagnosis.risk_label || "",
+        follow_up_date: r.data.diagnosis.follow_up_date || "",
+        referred_to: r.data.diagnosis.referred_to || "",
+        override_reason: r.data.diagnosis.override_reason || "",
+      });
+    }
   };
-  useEffect(() => { load().catch(() => toast.error("Could not load session")); /* eslint-disable-next-line */ }, [sessionId]);
+  useEffect(() => {
+    setPatientVerified(false);
+    load().catch(() => toast.error("Could not load session"));
+    /* eslint-disable-next-line */
+  }, [sessionId]);
 
-  if (!data) return <div className="min-h-screen bg-[#0A0F1C] text-slate-400 flex items-center justify-center">Loading…</div>;
-  const { patient, session, results = [], prediction = {} } = data;
+  if (!data) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground" data-testid="doctor-report">
+        Loading…
+      </div>
+    );
+  }
+  const {
+    patient,
+    session,
+    results = [],
+    prediction = {},
+    strabismus_ai: strabismusFromPayload,
+  } = data;
+  const strabismus_ai = strabismusFromPayload ?? session?.strabismus_ai ?? null;
   const risk = prediction.risk_level || "normal";
   const urgent = risk === "urgent";
   const medical = prediction.medical_findings || [];
 
-  const saveDiagnosis = async () => {
-    if (!form.diagnosis.trim()) return toast.error("Diagnosis required");
+  const saveDiagnosis = async (opts = { skipPatientVerify: false }) => {
+    const diagnosis = form.diagnosis.trim();
+    if (diagnosis.length < 5) return toast.error("Diagnosis must be at least 5 characters");
+    if (followUpDateIsPast(form.follow_up_date)) return toast.error("Follow-up date cannot be in the past");
+    if (!opts.skipPatientVerify && !data?.diagnosis && !patientVerified) {
+      setWrongPatientOpen(true);
+      return;
+    }
     setSaving(true);
     try {
-      await api.post("/doctor/diagnoses", { session_id: sessionId, ...form });
+      await api.post("/doctor/diagnoses", {
+        session_id: sessionId,
+        ...form,
+        diagnosis,
+        confirmed_by_doctor: true,
+        ai_agreement: "not_reviewed",
+      });
       toast.success("Diagnosis saved");
       load();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed");
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const recordExportAudit = (exportType) => {
+    api.post(`/sessions/${sessionId}/export-audit`, { export_type: exportType }).catch(() => {});
   };
 
   const downloadPdf = () => {
-    const d = generateReport({ patient, session, results, prediction });
+    recordExportAudit("medical_pdf");
+    const d = generateReport({ patient, session, results, prediction, strabismus_ai });
     d.save(`AmbyoAI-Medical-${patient?.name?.replace(/\s+/g, "_")}.pdf`);
+    toast.success("Medical PDF exported");
   };
   const downloadReferral = () => {
+    recordExportAudit("referral_letter");
     const d = generateReferralLetter({ patient, prediction });
     d.save(`Referral-${patient?.name?.replace(/\s+/g, "_")}.pdf`);
+    toast.success("Referral exported");
   };
 
+  const confirmExport = (type) => {
+    setExportConfirm(type);
+  };
+
+  const runConfirmedExport = () => {
+    const type = exportConfirm;
+    setExportConfirm(null);
+    if (type === "referral") downloadReferral();
+    else downloadPdf();
+  };
+
+  const sessionEyebrow = `Session #${session?.id?.slice(0, 8)} · ${session?.created_at ? new Date(session.created_at).toLocaleString() : "—"}`;
+
+  const fieldCls =
+    "mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors";
+
   return (
-    <div className="min-h-screen bg-[#0A0F1C] text-slate-100 page-enter" data-testid="doctor-report">
-      <header className="bg-[#121A2F]/80 backdrop-blur border-b border-white/10 sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => nav(-1)} data-testid="back-btn" className="p-2 rounded-lg hover:bg-white/10"><ArrowLeft size={18} /></button>
+    <div className="page-enter space-y-8" data-testid="doctor-report">
+      <PageHeader
+        eyebrow={sessionEyebrow}
+        title={patient?.name || "Patient"}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => nav(-1)}
+              data-testid="back-btn"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-muted/50"
+            >
+              <ArrowLeft size={16} /> Back
+            </button>
+            <button
+              type="button"
+              data-testid="download-pdf"
+              onClick={() => confirmExport("pdf")}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700"
+            >
+              <FileDown size={14} /> Medical PDF
+            </button>
+            {urgent && (
+              <button
+                type="button"
+                data-testid="download-referral"
+                onClick={() => confirmExport("referral")}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+              >
+                <Mail size={14} /> Referral
+              </button>
+            )}
+          </>
+        }
+      />
+      <div className="px-1">
+        <AuditActionNotice />
+      </div>
+
+      <MedicalDisclaimer />
+      <PatientContextBar patient={patient} session={session} prediction={prediction} consentSummary="On file" />
+      {urgent && <UrgentBanner findings={prediction.findings || []} />}
+
+      <Dialog open={wrongPatientOpen} onOpenChange={setWrongPatientOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm correct patient</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Before the first save, confirm this record matches the child in front of you:{" "}
+            <span className="font-semibold text-foreground">{patient?.name}</span> · DOB{" "}
+            {patient?.date_of_birth}.
+          </p>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setWrongPatientOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setPatientVerified(true);
+                setWrongPatientOpen(false);
+                saveDiagnosis({ skipPatientVerify: true });
+              }}
+            >
+              Correct patient — continue save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!exportConfirm} onOpenChange={(open) => !open && setExportConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export patient report?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              This export contains identifiable patient information and clinical screening data.
+              Confirm this is the correct patient before continuing.
+            </p>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              <AuditActionNotice className="text-amber-900" />
+            </div>
+            <p className="font-medium text-foreground">
+              {patient?.name} · DOB {patient?.date_of_birth} · Phone {maskPhone(patient?.phone)}
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setExportConfirm(null)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={runConfirmedExport}>
+              Continue export
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <motion.section
+        initial={{ y: 8, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+      >
+        <DashboardCard className="p-6 sm:p-8">
+          <div className="grid items-center gap-8 md:grid-cols-[auto_1fr]">
+            <ScoreRing score={prediction.health_score ?? 0} level={risk} size={180} stroke={14} />
             <div>
-              <div className="font-bold text-white leading-none tracking-tight">{patient?.name}</div>
-              <div className="text-[11px] text-slate-400 mt-0.5 font-mono">Session #{session?.id?.slice(0, 8)} · {new Date(session?.created_at).toLocaleString()}</div>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-teal-700">Clinical Risk</p>
+                <RiskBadge level={risk} />
+                <span className="font-mono text-xs text-muted-foreground">
+                  score {prediction.risk_score} · rule {prediction.clinical_rule_version || "—"}
+                </span>
+              </div>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#0A2540] sm:text-3xl">
+                Patient: {patient?.name}{" "}
+                <span className="text-base font-normal text-muted-foreground">
+                  ({patient?.age}y, {patient?.gender})
+                </span>
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                DOB {patient?.date_of_birth} · Phone {maskPhone(patient?.phone)}
+                {patient?.guardian_name ? ` · Guardian ${patient.guardian_name}` : ""}
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                {[
+                  ["Session started", session?.created_at ? new Date(session.created_at).toLocaleString() : "—"],
+                  ["Completed", session?.completed_at ? new Date(session.completed_at).toLocaleString() : "—"],
+                  ["Health score", `${prediction.health_score} / 100`],
+                ].map(([k, v]) => (
+                  <div key={k} className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+                    <div className="uppercase tracking-wider text-muted-foreground">{k}</div>
+                    <div className="mt-0.5 font-mono font-medium text-foreground">{v}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <OfflineBadge /><LanguageSwitcher variant="dark" />
-            <button data-testid="download-pdf" onClick={downloadPdf} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-teal-500 text-[#0A0F1C] font-semibold hover:bg-teal-400"><FileDown size={14} /> Medical PDF</button>
-            {urgent && <button data-testid="download-referral" onClick={downloadReferral} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-red-500 text-white font-semibold hover:bg-red-400"><Mail size={14} /> Referral</button>}
-          </div>
+        </DashboardCard>
+      </motion.section>
+
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Microscope size={16} className="text-teal-700" />
+          <h2 className="text-lg font-bold tracking-tight text-[#0A2540]">Medical Findings</h2>
         </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {urgent && <UrgentBanner findings={prediction.findings || []} />}
-
-        <motion.section initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          className="bg-[#121A2F] border border-white/10 rounded-3xl p-6 sm:p-8 grid md:grid-cols-[auto_1fr] gap-8 items-center">
-          <ScoreRing score={prediction.health_score ?? 0} level={risk} size={180} stroke={14} />
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="text-xs uppercase tracking-widest text-teal-300 font-bold">Clinical Risk</p>
-              <RiskBadge level={risk} />
-              <span className="text-xs font-mono text-slate-400">score {prediction.risk_score} · {prediction.model_version}</span>
-            </div>
-            <h1 className="mt-2 text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Patient: {patient?.name} <span className="text-slate-400 text-base font-normal">({patient?.age}y, {patient?.gender})</span>
-            </h1>
-            <p className="mt-2 text-slate-400 text-sm">DOB {patient?.date_of_birth} · Phone +91 {patient?.phone || "—"}{patient?.guardian_name ? ` · Guardian ${patient.guardian_name}` : ""}</p>
-            <div className="mt-4 grid sm:grid-cols-3 gap-3">
-              <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs">
-                <div className="text-slate-500 uppercase tracking-wider">Session started</div>
-                <div className="font-mono text-white mt-0.5">{new Date(session?.created_at).toLocaleString()}</div>
-              </div>
-              <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs">
-                <div className="text-slate-500 uppercase tracking-wider">Completed</div>
-                <div className="font-mono text-white mt-0.5">{session?.completed_at ? new Date(session.completed_at).toLocaleString() : "—"}</div>
-              </div>
-              <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs">
-                <div className="text-slate-500 uppercase tracking-wider">Health score</div>
-                <div className="font-mono text-white mt-0.5">{prediction.health_score} / 100</div>
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        {/* Medical findings with clinical interpretations */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Microscope size={16} className="text-teal-300" />
-            <h2 className="text-lg font-bold tracking-tight">Medical Findings</h2>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            {medical.length === 0 ? (
-              <div className="md:col-span-2 bg-[#121A2F] border border-white/10 rounded-xl p-5 text-slate-500 text-sm">
+        <div className="grid gap-4 md:grid-cols-2">
+          {medical.length === 0 ? (
+            <DashboardCard className="p-5 md:col-span-2">
+              <p className="text-sm text-muted-foreground">
                 No abnormal findings flagged. All measured values within normal clinical thresholds.
-              </div>
-            ) : medical.map((f, i) => (
+              </p>
+            </DashboardCard>
+          ) : (
+            medical.map((f, i) => (
               <motion.div
                 key={i}
                 data-testid={`medical-finding-${i}`}
-                initial={{ y: 6, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.05 }}
-                className="bg-[#121A2F] border border-white/10 rounded-xl p-5"
+                initial={{ y: 6, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: i * 0.05 }}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-slate-400 font-bold">{f.test}</div>
-                    <div className="mt-1 font-mono text-2xl font-bold text-white">{f.value}</div>
+                <DashboardCard className="p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{f.test}</div>
+                      <div className="mt-1 font-mono text-2xl font-bold text-[#0A2540]">{f.value}</div>
+                    </div>
+                    <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${SEV_STYLE[f.severity] || SEV_STYLE.normal}`}>
+                      {f.severity}
+                    </span>
                   </div>
-                  <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider border ${SEV_STYLE[f.severity] || SEV_STYLE.normal}`}>
-                    {f.severity}
-                  </span>
-                </div>
-                <div className="mt-3 text-xs text-slate-400">
-                  <span className="uppercase tracking-wider">Threshold:</span> <span className="text-slate-300 font-mono">{f.threshold}</span>
-                </div>
-                <p className="mt-2 text-sm text-slate-200 leading-relaxed">{f.interpretation}</p>
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    <span className="uppercase tracking-wider">Threshold:</span>{" "}
+                    <span className="font-mono text-foreground">{f.threshold}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-foreground">{f.interpretation}</p>
+                </DashboardCard>
               </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* Per-test raw data */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Activity size={16} className="text-teal-300" />
-            <h2 className="text-lg font-bold tracking-tight">Test-by-test raw data</h2>
-          </div>
-          <div className="grid md:grid-cols-3 gap-4">
-            {Object.keys(TESTS).map((k) => (
-              <ResultCard key={k} name={k} result={results.find((r) => r.test_name === k)} />
-            ))}
-          </div>
-        </section>
-
-        {/* Diagnosis form */}
-        <section className="bg-[#121A2F] border border-white/10 rounded-2xl p-6 sm:p-8">
-          <h2 className="text-lg font-bold tracking-tight">Doctor's Review & Diagnosis</h2>
-          <p className="text-sm text-slate-400 mt-1">Your notes will be saved to the medical record and appear on the final PDF report.</p>
-
-          <div className="mt-5 space-y-4">
-            <div>
-              <label className="text-xs uppercase tracking-widest font-semibold text-slate-400">Diagnosis *</label>
-              <textarea
-                data-testid="diagnosis-input"
-                value={form.diagnosis}
-                onChange={(e) => setForm({ ...form, diagnosis: e.target.value })}
-                rows={3}
-                placeholder="E.g. Right-eye amblyopia with mild esotropia. Rule out refractive amblyopia."
-                className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-400 transition-colors resize-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-widest font-semibold text-slate-400">Treatment plan</label>
-              <textarea
-                data-testid="treatment-input"
-                value={form.treatment}
-                onChange={(e) => setForm({ ...form, treatment: e.target.value })}
-                rows={3}
-                placeholder="E.g. Prescription glasses, patching 2h/day of dominant eye for 6 weeks, review in 1 month."
-                className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-400 transition-colors resize-none"
-              />
-            </div>
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div>
-                <label className="text-xs uppercase tracking-widest font-semibold text-slate-400">Clinical label</label>
-                <input
-                  data-testid="risk-label-input"
-                  value={form.risk_label}
-                  onChange={(e) => setForm({ ...form, risk_label: e.target.value })}
-                  placeholder="e.g. Anisometropic amblyopia"
-                  className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-400 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-widest font-semibold text-slate-400">Follow-up</label>
-                <input
-                  type="date"
-                  data-testid="followup-input"
-                  value={form.follow_up_date}
-                  onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })}
-                  className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-400 transition-colors text-slate-200"
-                />
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-widest font-semibold text-slate-400">Referred to</label>
-                <select
-                  data-testid="referred-input"
-                  value={form.referred_to}
-                  onChange={(e) => setForm({ ...form, referred_to: e.target.value })}
-                  className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-400 transition-colors text-slate-200"
-                >
-                  <option value="">—</option>
-                  <option>Aravind Coimbatore</option>
-                  <option>Aravind Madurai</option>
-                  <option>Aravind Chennai</option>
-                  <option>Aravind Tirunelveli</option>
-                  <option>Aravind Pondicherry</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center justify-end">
-            <button
-              data-testid="save-diagnosis"
-              onClick={saveDiagnosis}
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-500 text-[#0A0F1C] font-bold shadow-md hover:bg-teal-400 transition-all disabled:opacity-60"
-            ><Save size={16} /> {saving ? "Saving…" : "Save diagnosis"}</button>
-          </div>
-
-          {data.diagnosis && (
-            <div className="mt-5 text-xs text-slate-500 font-mono">
-              Last saved {new Date(data.diagnosis.created_at).toLocaleString()} by {data.diagnosis.doctor_name || "Doctor"}
-            </div>
+            ))
           )}
-        </section>
-      </main>
+        </div>
+      </section>
+
+      <section data-testid="ai-deviation-insights">
+        <DashboardCard className="border border-amber-200/80 bg-amber-50/30 p-6">
+          <div className="mb-2 flex items-center gap-2">
+            <Info size={16} className="text-amber-700" />
+            <h2 className="text-lg font-bold tracking-tight text-[#0A2540]">AI-assisted camera screening (doctor-only)</h2>
+          </div>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Supplementary AI screening outputs only. Not a diagnosis. Confirm clinically.
+          </p>
+
+          {strabismus_ai ? (
+            <AIStrabismusDoctorCard strabismus_ai={strabismus_ai} />
+          ) : (
+            <p className="text-sm text-muted-foreground" data-testid="doctor-strabismus-unavailable">
+              AI strabismus analysis not available for this session.
+            </p>
+          )}
+        </DashboardCard>
+      </section>
+
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Activity size={16} className="text-teal-700" />
+          <h2 className="text-lg font-bold tracking-tight text-[#0A2540]">Test-by-test raw data</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {Object.keys(TESTS).map((k) => (
+            <ResultCard key={k} name={k} result={results.find((r) => r.test_name === k)} />
+          ))}
+        </div>
+      </section>
+
+      <DashboardCard className="p-6 sm:p-8">
+        <h2 className="text-lg font-bold tracking-tight text-[#0A2540]">Doctor&apos;s Review & Diagnosis</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Your notes will be saved to the medical record and appear on the final PDF report.
+        </p>
+
+        <div className="mt-5 space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Diagnosis *</label>
+            <textarea
+              data-testid="diagnosis-input"
+              value={form.diagnosis}
+              onChange={(e) => setForm({ ...form, diagnosis: e.target.value })}
+              rows={3}
+              placeholder="E.g. Right-eye amblyopia with mild esotropia. Rule out refractive amblyopia."
+              className={`${fieldCls} resize-none`}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Treatment plan</label>
+            <textarea
+              data-testid="treatment-input"
+              value={form.treatment}
+              onChange={(e) => setForm({ ...form, treatment: e.target.value })}
+              rows={3}
+              placeholder="E.g. Prescription glasses, patching 2h/day of dominant eye for 6 weeks, review in 1 month."
+              className={`${fieldCls} resize-none`}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Clinical label</label>
+              <input
+                data-testid="risk-label-input"
+                value={form.risk_label}
+                onChange={(e) => setForm({ ...form, risk_label: e.target.value })}
+                placeholder="e.g. Anisometropic amblyopia"
+                className={fieldCls}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Follow-up</label>
+              <input
+                type="date"
+                data-testid="followup-input"
+                value={form.follow_up_date}
+                onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })}
+                className={fieldCls}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Referred to</label>
+              <select
+                data-testid="referred-input"
+                value={form.referred_to}
+                onChange={(e) => setForm({ ...form, referred_to: e.target.value })}
+                className={fieldCls}
+              >
+                <option value="">—</option>
+                <option>Aravind Coimbatore</option>
+                <option>Aravind Madurai</option>
+                <option>Aravind Chennai</option>
+                <option>Aravind Tirunelveli</option>
+                <option>Aravind Pondicherry</option>
+              </select>
+            </div>
+          </div>
+          <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Info size={14} className="text-teal-700" />
+              <label className="text-xs font-bold uppercase tracking-widest text-teal-800">Clinician Override Reason</label>
+            </div>
+            <textarea
+              data-testid="override-input"
+              value={form.override_reason || ""}
+              onChange={(e) => setForm({ ...form, override_reason: e.target.value })}
+              placeholder="Required if your diagnosis differs significantly from the AI risk score."
+              className="h-16 w-full resize-none border-0 bg-transparent p-0 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <AuditActionNotice />
+        </div>
+        <div className="mt-6 flex items-center justify-end">
+          <button
+            type="button"
+            data-testid="save-diagnosis"
+            onClick={() => saveDiagnosis()}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 font-bold text-white shadow-md transition-all hover:bg-teal-700 disabled:opacity-60"
+          >
+            <Save size={16} /> {saving ? "Saving…" : "Save diagnosis"}
+          </button>
+        </div>
+
+        {data.diagnosis && (
+          <div className="mt-5 font-mono text-xs text-muted-foreground">
+            Last saved {new Date(data.diagnosis.created_at).toLocaleString()} by {data.diagnosis.doctor_name || "Doctor"}
+          </div>
+        )}
+      </DashboardCard>
     </div>
   );
 }

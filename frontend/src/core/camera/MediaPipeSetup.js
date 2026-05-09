@@ -4,34 +4,59 @@ import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 let landmarker = null;
 let resolver = null;
 
+/** Whole years for calibration; API may send string or null. */
+export function normalizeAgeYears(input, fallback = 8) {
+  if (input == null || input === "") return fallback;
+  const n = typeof input === "number" ? input : parseFloat(String(input).trim().replace(",", "."));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(18, Math.max(1, Math.round(n)));
+}
+
 export async function loadLandmarker() {
   if (landmarker) return landmarker;
   try {
     resolver = await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
     );
-    landmarker = await FaceLandmarker.createFromOptions(resolver, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-        delegate: "GPU",
-      },
-      runningMode: "VIDEO",
-      numFaces: 1,
-      outputFaceBlendshapes: false,
-      outputFacialTransformationMatrixes: false,
-    });
-    return landmarker;
   } catch (e) {
-    console.warn("[MediaPipe] load failed, using fallback", e);
+    console.warn("[MediaPipe] WASM resolver failed", e);
     return null;
   }
+
+  const baseOptions = (delegate) => ({
+    modelAssetPath:
+      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+    delegate,
+  });
+
+  const visionOptions = (delegate) => ({
+    baseOptions: baseOptions(delegate),
+    runningMode: "VIDEO",
+    numFaces: 1,
+    outputFaceBlendshapes: false,
+    outputFacialTransformationMatrixes: false,
+  });
+
+  for (const delegate of ["GPU", "CPU"]) {
+    try {
+      landmarker = await FaceLandmarker.createFromOptions(resolver, visionOptions(delegate));
+      if (delegate === "CPU") {
+        console.info("[MediaPipe] Using CPU delegate (GPU unavailable or blocked).");
+      }
+      return landmarker;
+    } catch (e) {
+      console.warn(`[MediaPipe] FaceLandmarker failed with delegate=${delegate}`, e);
+      landmarker = null;
+    }
+  }
+  return null;
 }
 
-// Age-based face width in cm (inter-temporal)
+// Age-based face width in cm (inter-temporal) — bands align with Snellen/Titmus profiles (≤4, ≤7, older).
 export function faceWidthCm(ageYears) {
-  if (ageYears <= 4) return 11;
-  if (ageYears <= 7) return 12;
+  const y = normalizeAgeYears(ageYears, 8);
+  if (y <= 4) return 11;
+  if (y <= 7) return 12;
   return 14;
 }
 

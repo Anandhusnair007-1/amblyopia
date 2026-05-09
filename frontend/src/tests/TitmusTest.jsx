@@ -50,7 +50,7 @@ function AnimalPattern({ correctIdx }) {
   );
 }
 
-export default function TitmusTest({ patient, onComplete }) {
+export default function TitmusTest({ patient, onComplete, flowIndex, flowTotal, flowLabels }) {
   const { lang } = useI18n();
   const age = patient?.age ?? 8;
   const profile = age <= 4 ? "A" : age <= 7 ? "B" : "C";
@@ -83,13 +83,20 @@ export default function TitmusTest({ patient, onComplete }) {
   const current = subTests[step];
 
   return (
-    <div className="relative flex-1 flex flex-col items-center justify-center px-6 py-24">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[40rem] h-[40rem] rounded-full bg-violet-400/10 blur-3xl" />
-      </div>
+    <TestStage
+      testId="titmus"
+      requireCamera={false}
+      skipGate
+      progress={flowTotal ? { index: flowIndex || 0, total: flowTotal, labels: flowLabels || [] } : null}
+    >
+      {() => (
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-24">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -top-40 left-1/2 h-[40rem] w-[40rem] -translate-x-1/2 rounded-full bg-slate-500/10 blur-3xl" />
+          </div>
 
-      <div className="absolute top-24 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-        <p className="text-xs uppercase tracking-[0.3em] text-violet-400 font-bold">Titmus Stereo · {step + 1}/{subTests.length}</p>
+      <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 text-center sm:top-20">
+        <p className="text-xs font-semibold tracking-wide text-teal-300">Titmus Stereo · {step + 1}/{subTests.length}</p>
       </div>
 
       <AnimatePresence mode="wait">
@@ -134,13 +141,15 @@ export default function TitmusTest({ patient, onComplete }) {
         </motion.div>
       </AnimatePresence>
 
-      {reveal && (
-        <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          className={`absolute ${reveal === "correct" ? "text-emerald-400" : "text-red-400"}`}
-        >
-          {reveal === "correct" ? <Check size={100} /> : <X size={100} />}
-        </motion.div>
+          {reveal && (
+            <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              className={`absolute ${reveal === "correct" ? "text-emerald-400" : "text-red-400"}`}
+            >
+              {reveal === "correct" ? <Check size={100} /> : <X size={100} />}
+            </motion.div>
+          )}
+        </div>
       )}
-    </div>
+    </TestStage>
   );
 }
