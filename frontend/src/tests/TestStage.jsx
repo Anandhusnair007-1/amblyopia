@@ -204,7 +204,7 @@ export default function TestStage({
               />
             </div>
           )}
-          {children?.({ ready, distance, cameraReady, muted })}
+          {typeof children === "function" ? children({ ready, distance, cameraReady, muted }) : children}
         </div>
       )}
 

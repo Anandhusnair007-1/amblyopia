@@ -240,7 +240,7 @@ export default function PatientHome() {
                     new Date().getHours() < 12 ? t("morning") : new Date().getHours() < 18 ? t("afternoon") : t("evening"),
                 })}{" "}
                 <span className="bg-gradient-to-br from-teal-700 to-emerald-600 bg-clip-text text-transparent">
-                  {loading ? "…" : (patient?.name?.split(" ")[0] || t("friend"))}
+                  {loading ? "…" : (patient?.name?.split(" ")?.[0] || t("friend"))}
                 </span>
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-slate-600">
@@ -482,26 +482,26 @@ export default function PatientHome() {
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
             className="grid grid-cols-2 gap-4 md:grid-cols-3"
           >
-            {TESTS.map((t) => {
-              const Icon = t.icon;
+            {TESTS.map((testItem) => {
+              const Icon = testItem.icon;
               return (
                 <motion.button
-                  key={t.id}
+                  key={testItem.id}
                   variants={{ hidden: { y: 10, opacity: 0 }, show: { y: 0, opacity: 1 } }}
-                  data-testid={`quick-${t.id}`}
-                  onClick={() => startQuick(t.id)}
+                  data-testid={`quick-${testItem.id}`}
+                  onClick={() => startQuick(testItem.id)}
                   className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-lg"
                 >
-                  <div className={`absolute inset-0 bg-gradient-to-br ${t.color} opacity-0 transition-opacity group-hover:opacity-[0.08]`} />
+                  <div className={`absolute inset-0 bg-gradient-to-br ${testItem.color} opacity-0 transition-opacity group-hover:opacity-[0.08]`} />
                   <div className="relative flex items-start justify-between gap-3">
-                    <div className={`h-12 w-12 rounded-2xl bg-gradient-to-br ${t.color} flex items-center justify-center text-white shadow-md`}>
+                    <div className={`h-12 w-12 rounded-2xl bg-gradient-to-br ${testItem.color} flex items-center justify-center text-white shadow-md`}>
                       <Icon size={22} />
                     </div>
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-slate-400">{t.dur}</span>
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-slate-400">{testItem.dur}</span>
                   </div>
                   <div className="relative">
-                    <h3 className="mt-4 font-bold text-[#0A2540] tracking-tight">{t(t.nameKey)}</h3>
-                    <p className="mt-1 text-sm text-slate-500 leading-snug">{t(t.descKey)}</p>
+                    <h3 className="mt-4 font-bold text-[#0A2540] tracking-tight">{t(testItem.nameKey)}</h3>
+                    <p className="mt-1 text-sm text-slate-500 leading-snug">{t(testItem.descKey)}</p>
                     <div className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-700">
                       {t("start")} <ChevronRight size={16} className="transition-transform group-hover:translate-x-0.5" />
                     </div>
