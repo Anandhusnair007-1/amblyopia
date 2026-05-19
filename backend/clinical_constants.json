@@ -1,0 +1,27 @@
+{
+  "version": "clinical-fallback-v3",
+  "age_test_bands": [
+    { "min": 0, "max": 1, "tests": ["red_reflex"] },
+    { "min": 1, "max": 3, "tests": ["red_reflex", "visual_acuity", "gaze"] },
+    { "min": 3, "max": 12, "tests": ["visual_acuity", "gaze", "hirschberg", "prism", "titmus", "red_reflex"] },
+    { "min": 13, "max": 17, "tests": ["visual_acuity", "gaze", "hirschberg", "prism", "titmus", "red_reflex"] },
+    { "min": 18, "max": 64, "tests": ["visual_acuity", "gaze", "hirschberg", "prism", "titmus"] },
+    { "min": 65, "max": 99, "tests": ["visual_acuity", "red_reflex"] }
+  ],
+  "snellen_line_denominators": [60, 36, 24, 18, 12, 9, 6],
+  "va_urgent_denominator_min": 24,
+  "va_moderate_denominator_min": 12,
+  "va_normal_denominator_max": 9,
+  "amblyopia_inter_eye_lines_min": 2,
+  "gaze_urgent_pd": 20,
+  "gaze_moderate_pd": 10,
+  "gaze_mild_pd": 4,
+  "hirschberg_urgent_mm": 4,
+  "hirschberg_moderate_mm": 2,
+  "prism_urgent_pd": 20,
+  "prism_moderate_pd": 10,
+  "prism_mild_pd": 4,
+  "hirschberg_pd_per_mm": 22,
+  "hirschberg_min_samples_confident": 8,
+  "hirschberg_conversion_method": "max_displacement_mm_times_pd_per_mm"
+}

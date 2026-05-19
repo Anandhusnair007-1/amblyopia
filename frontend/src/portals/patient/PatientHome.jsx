@@ -36,6 +36,7 @@ import {
 import { motion } from "framer-motion";
 import ScoreRing from "@/components/ambyo/ScoreRing";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getTestFlowForAge, isTestAllowedForAge } from "@/core/clinical/ageTestRouter";
 
 const TESTS = [
   { id: "visual_acuity", nameKey: "test_visual_acuity", descKey: "test_visual_acuity_desc", icon: ScanEye, color: "from-sky-500 to-blue-600", dur: "~60s" },
@@ -46,7 +47,9 @@ const TESTS = [
   { id: "red_reflex",    nameKey: "test_red_reflex",    descKey: "test_red_reflex_desc",    icon: Sun,        color: "from-rose-400 to-red-600", dur: "~15s" },
 ];
 
-const TEST_ORDER = ["visual_acuity", "gaze", "hirschberg", "prism", "titmus", "red_reflex"];
+function testOrderForAge(age) {
+  return getTestFlowForAge(age ?? 8).map((s) => s.id);
+}
 
 const inputCls =
   "w-full h-12 px-4 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all";
@@ -93,7 +96,8 @@ export default function PatientHome() {
     try {
       const r = await api.get(`/sessions/${sessionId}`);
       const done = new Set((r.data.results || []).map((x) => x.test_name));
-      const next = TEST_ORDER.findIndex((id) => !done.has(id));
+      const order = testOrderForAge(r.data.patient?.age ?? data.patient?.age);
+      const next = order.findIndex((id) => !done.has(id));
       return next >= 0 ? next : 0;
     } catch {
       return 0;
@@ -114,7 +118,7 @@ export default function PatientHome() {
         return;
       }
       const s = await api.post("/sessions", { patient_id: data.patient.id });
-      nav(`/patient/session/${s.data.id}/test/0`);
+      nav(`/patient/session/${s.data.id}/history`);
     } catch (e) {
       if (shouldQueue(e)) {
         await queueSessionCreate({ patient_id: data.patient.id });
@@ -326,12 +330,7 @@ export default function PatientHome() {
             </div>
 
             <div className="justify-self-center md:justify-self-end">
-              <ScoreRing
-                score={typeof lastAny?.health_score === "number" ? lastAny.health_score : 0}
-                level={lastRisk}
-                size={190}
-                stroke={14}
-              />
+              <ScoreRing level={lastRisk} size={190} stroke={14} qualitative />
             </div>
           </div>
         </motion.section>
@@ -482,7 +481,7 @@ export default function PatientHome() {
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
             className="grid grid-cols-2 gap-4 md:grid-cols-3"
           >
-            {TESTS.map((testItem) => {
+            {TESTS.filter((item) => isTestAllowedForAge(item.id, data.patient?.age)).map((testItem) => {
               const Icon = testItem.icon;
               return (
                 <motion.button

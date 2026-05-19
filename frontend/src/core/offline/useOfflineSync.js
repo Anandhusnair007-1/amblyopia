@@ -6,6 +6,7 @@ import {
   deleteQueuedSession,
   listCachedResults,
   deleteCachedResult,
+  recordSyncConflict,
 } from "@/core/offline/db";
 
 const SYNCED_BANNER_MS = 4500;
@@ -52,7 +53,17 @@ async function flushCachedResults() {
       await api.post(`/sessions/${row.session_id}/results`, payload);
       await deleteCachedResult(row.id);
     } catch (e) {
-      if (!shouldQueue(e)) throw e;
+      if (!shouldQueue(e)) {
+        const payload = JSON.parse(row.payload || "{}");
+        await recordSyncConflict({
+          session_id: row.session_id,
+          test_name: row.test_name,
+          payload,
+          error: e?.response?.data?.detail || e?.message || "sync conflict",
+        });
+        await deleteCachedResult(row.id);
+        continue;
+      }
       return;
     }
   }

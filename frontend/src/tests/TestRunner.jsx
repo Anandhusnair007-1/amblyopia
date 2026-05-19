@@ -11,31 +11,26 @@ import { ChevronLeft, Home, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MedicalDisclaimer from "@/components/MedicalDisclaimer";
 import { motion, AnimatePresence } from "framer-motion";
-import VisualAcuityTest from "@/tests/VisualAcuityTest";
-import GazeTest from "@/tests/GazeTest";
-import HirschbergTest from "@/tests/HirschbergTest";
-import PrismDiopterTest from "@/tests/PrismDiopterTest";
-import RedReflexTest from "@/tests/RedReflexTest";
-import TitmusTest from "@/tests/TitmusTest";
 import HeidelbergTest from "@/tests/HeidelbergTest";
 import { AIScreeningGate } from "@/components/ambyo/AIScreeningGate";
 import { normalizeAgeYears } from "@/core/camera/MediaPipeSetup";
+import { getTestFlowForAge } from "@/core/clinical/ageTestRouter";
 import { cacheResult } from "@/core/offline/db";
 import { shouldQueue } from "@/core/offline/useOfflineSync";
+import { getDeviceInfo } from "@/core/vision/ScreenCalibration";
 
 /** Camera-based steps that use the server quality model before starting */
 export const CAMERA_QUALITY_GATE_TESTS = new Set(["gaze", "hirschberg", "red_reflex"]);
 
-export const TEST_FLOW = [
-  { id: "visual_acuity", labelKey: "test_visual_acuity", comp: VisualAcuityTest, distance: [35, 45] },
-  { id: "gaze",          labelKey: "test_gaze",          comp: GazeTest, distance: [40, 60] },
-  { id: "hirschberg",    labelKey: "test_hirschberg",    comp: HirschbergTest, distance: [30, 45] },
-  { id: "prism",         labelKey: "test_prism",         comp: PrismDiopterTest, distance: [0, 0] },
-  { id: "titmus",        labelKey: "test_titmus",        comp: TitmusTest, distance: [40, 60] },
-  { id: "red_reflex",    labelKey: "test_red_reflex",    comp: RedReflexTest, distance: [25, 35] },
-  // Optional 7th test (proxy for Heidelberg retinal imaging / OCT).
-  { id: "heidelberg",    labelKey: "test_heidelberg_proxy", comp: HeidelbergTest, distance: [25, 35] },
-];
+/** Default child flow (age 8) — used by quick-test id lookup for heidelberg. */
+export const TEST_FLOW = getTestFlowForAge(8);
+
+const HEIDELBERG_STEP = {
+  id: "heidelberg",
+  labelKey: "test_heidelberg_proxy",
+  comp: HeidelbergTest,
+  distance: [25, 35],
+};
 
 function TestRunnerTopBar({ onBack, onHome, t, right }) {
   return (
@@ -90,18 +85,35 @@ export default function TestRunner() {
   const [search] = useSearchParams();
   const quick = search.get("quick") === "1";
   const { t } = useI18n();
-  const idx = (() => {
-    const n = parseInt(testIndex || "0", 10);
-    if (Number.isFinite(n) && String(n) === String(testIndex || "0")) return n;
-    const byId = TEST_FLOW.findIndex((t) => t.id === String(testIndex || "").toLowerCase());
-    return byId >= 0 ? byId : 0;
-  })();
-  const test = TEST_FLOW[idx];
   const [session, setSession] = useState(null);
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cameraGateDone, setCameraGateDone] = useState(false);
   const qualityGateMetaRef = useRef(null);
+
+  const patientForTests = useMemo(() => {
+    if (!patient) return null;
+    return { ...patient, age: normalizeAgeYears(patient.age, 8) };
+  }, [patient]);
+
+  const activeFlow = useMemo(() => {
+    const age = patientForTests?.age ?? 8;
+    const base = getTestFlowForAge(age);
+    if (String(testIndex || "").toLowerCase() === "heidelberg") {
+      return [...base, HEIDELBERG_STEP];
+    }
+    return base;
+  }, [patientForTests?.age, testIndex]);
+
+  const idx = useMemo(() => {
+    const n = parseInt(testIndex || "0", 10);
+    if (Number.isFinite(n) && String(n) === String(testIndex || "0")) return n;
+    const byId = activeFlow.findIndex((step) => step.id === String(testIndex || "").toLowerCase());
+    return byId >= 0 ? byId : 0;
+  }, [testIndex, activeFlow]);
+
+  const test = activeFlow[idx];
+  const testId = test?.id || "";
 
   useEffect(() => {
     let mounted = true;
@@ -116,8 +128,8 @@ export default function TestRunner() {
 
   useEffect(() => {
     qualityGateMetaRef.current = null;
-    setCameraGateDone(!CAMERA_QUALITY_GATE_TESTS.has(test?.id || ""));
-  }, [test?.id]);
+    setCameraGateDone(!CAMERA_QUALITY_GATE_TESTS.has(testId));
+  }, [testId]);
 
   const submitResult = useCallback(async (payload) => {
     if (!test) return;
@@ -130,6 +142,9 @@ export default function TestRunner() {
       test_name: test.id,
       raw_score: payload.raw_score ?? 0,
       normalized_score: payload.normalized_score ?? 0,
+      result_state: details.result_state || details.test_status || "completed",
+      device_info: details.device_info || getDeviceInfo(),
+      calibration_info: details.calibration_info || {},
       details,
     };
     try {
@@ -153,15 +168,21 @@ export default function TestRunner() {
       return;
     }
     const next = idx + 1;
-    if (next >= TEST_FLOW.length) {
+    if (next >= activeFlow.length) {
       try { await api.post(`/sessions/${sessionId}/complete`); } catch (e) {}
       nav(`/patient/session/${sessionId}/results`);
     } else {
       nav(`/patient/session/${sessionId}/test/${next}${quick ? "?quick=1" : ""}`);
     }
-  }, [idx, sessionId, nav, submitResult, quick]);
+  }, [idx, sessionId, nav, submitResult, quick, activeFlow.length]);
 
-  const skip = async () => { await goNext({ raw_score: 0, normalized_score: 0, details: { skipped: true } }); };
+  const skip = async () => {
+    await goNext({
+      raw_score: 0,
+      normalized_score: 0,
+      details: { skipped: true, test_status: "skipped", measurement_valid: false },
+    });
+  };
 
   const querySuffix = quick ? "?quick=1" : "";
 
@@ -182,12 +203,7 @@ export default function TestRunner() {
     nav("/patient");
   }, [nav]);
 
-  const patientForTests = useMemo(() => {
-    if (!patient) return null;
-    return { ...patient, age: normalizeAgeYears(patient.age, 8) };
-  }, [patient]);
-
-  const labels = useMemo(() => TEST_FLOW.map((f) => t(f.labelKey)), [t]);
+  const labels = useMemo(() => activeFlow.map((f) => t(f.labelKey)), [activeFlow, t]);
   const testLabel = test ? t(test.labelKey) : "";
 
   if (loading || !test) {
@@ -223,7 +239,7 @@ export default function TestRunner() {
   }
 
   const TestComp = test.comp;
-  const totalSteps = quick ? 1 : TEST_FLOW.length;
+  const totalSteps = quick ? 1 : activeFlow.length;
   const displayIdx = quick ? 0 : idx;
 
   return (

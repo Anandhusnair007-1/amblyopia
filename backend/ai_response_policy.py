@@ -4,7 +4,24 @@ Pure functions — no I/O.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
+
+_STRABISMUS_CODE_RE = re.compile(
+    r"\b(ET|XT|HT|esotropia|exotropia|hypertropia)\b",
+    re.IGNORECASE,
+)
+
+PATIENT_INTER_EYE_SCREENING_MSG = (
+    "Screening found a difference between the two eyes. "
+    "Please confirm with an eye-care professional."
+)
+PATIENT_FAMILY_HISTORY_MSG = (
+    "Family history may increase the need for routine eye-care follow-up."
+)
+PATIENT_AI_REVIEW_FINDING = (
+    "AI screening output suggests this result should be reviewed by an eye-care professional."
+)
 
 # Keys never returned to patients on session GET (prediction document)
 PATIENT_PREDICTION_STRIP = frozenset({
@@ -76,31 +93,67 @@ def build_doctor_safe_screen_json(full: Dict[str, Any]) -> Dict[str, Any]:
     return dict(full)
 
 
-def build_patient_safe_strabismus_json(full: Dict[str, Any]) -> Dict[str, Any]:
+PATIENT_AI_REVIEW_ONLY = (
+    "AI screening output suggests this should be reviewed by an eye-care professional."
+)
+
+
+def cap_patient_strabismus_risk(
+    ai_risk: Optional[str],
+    rule_based_risk_level: Optional[str],
+) -> str:
+    """
+    Patient-facing AI risk must not exceed rule-based corroboration.
+    Urgent AI alone cannot surface as urgent to patients.
+    """
+    ai = str(ai_risk or "normal").lower()
+    rule = str(rule_based_risk_level or "normal").lower()
+    if rule == "urgent":
+        if ai in ("urgent", "moderate"):
+            return ai
+        return "mild"
+    if rule == "moderate":
+        if ai in ("moderate", "mild"):
+            return "mild"
+        return "mild" if ai in ("urgent", "moderate") else ai
+    # normal, mild, incomplete
+    if ai in ("urgent", "moderate"):
+        return "mild"
+    return ai if ai in ("normal", "mild") else "mild"
+
+
+def build_patient_safe_strabismus_json(
+    full: Dict[str, Any],
+    *,
+    rule_based_risk_level: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Response body for POST /api/ai/analyze-strabismus when caller is a patient.
     Omits condition, confidence, and class scores; risk + plain-language guidance only.
     """
-    risk_raw = full.get("risk") or "normal"
-    risk_key = str(risk_raw).lower()
-    recommendations: Dict[str, str] = {
-        "normal": (
-            "Your eye screening looks good. Continue regular check-ups."
-        ),
-        "mild": (
-            "Minor findings detected. Please consult your eye doctor."
-        ),
-        "moderate": (
-            "Some findings require attention. Please visit an eye specialist soon."
-        ),
-        "urgent": (
-            "Important findings detected. Please see an eye doctor as soon as possible."
-        ),
-    }
-    recommendation = recommendations.get(risk_key, recommendations["normal"])
+    confidence = full.get("confidence")
+    try:
+        confidence_f = float(confidence)
+    except (TypeError, ValueError):
+        confidence_f = 0.0
+    rule = str(rule_based_risk_level or "normal").lower()
+    uncertain = confidence is not None and confidence_f < 0.65
+    ai_raw = "mild" if uncertain and rule != "urgent" else (full.get("risk") or "normal")
+    risk_key = cap_patient_strabismus_risk(ai_raw, rule_based_risk_level)
+    if risk_key == "urgent" and rule == "urgent":
+        recommendation = (
+            "Important screening findings detected. Please see an eye doctor as soon as possible."
+        )
+    elif uncertain:
+        recommendation = PATIENT_AI_REVIEW_ONLY
+    elif risk_key == "normal":
+        recommendation = "No major screening concern on this pass. Continue regular eye check-ups."
+    else:
+        recommendation = PATIENT_AI_REVIEW_ONLY
     return {
         "screening_complete": True,
-        "risk": risk_raw,
+        "risk": risk_key,
+        "uncertain": uncertain,
         "recommendation": recommendation,
         "disclaimer": (
             "This is an AI-assisted screening tool. It is not a medical diagnosis."
@@ -109,15 +162,43 @@ def build_patient_safe_strabismus_json(full: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _sanitize_patient_finding_text(text: str) -> Optional[str]:
+    s = str(text).strip()
+    if not s:
+        return None
+    if _STRABISMUS_CODE_RE.search(s):
+        return PATIENT_AI_REVIEW_FINDING
+    low = s.lower()
+    if "family history" in low or ("family" in low and ("amblyopia" in low or "lazy eye" in low)):
+        return PATIENT_FAMILY_HISTORY_MSG
+    if (
+        "inter-eye" in low
+        or "inter eye" in low
+        or "possible amblyopia" in low
+        or ("line(s)" in low and ("difference" in low or "acuity" in low))
+        or ("amblyopia" in low and "difference" in low)
+    ):
+        return PATIENT_INTER_EYE_SCREENING_MSG
+    if "amblyopia" in low or "lazy eye" in low:
+        return PATIENT_FAMILY_HISTORY_MSG
+    return s
+
+
 def sanitize_prediction_for_patient(pred: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not pred:
         return pred
     out = {k: v for k, v in pred.items() if k not in PATIENT_PREDICTION_STRIP}
-    if "findings" in out and isinstance(out["findings"], list):
-        out["findings"] = [
-            f for f in out["findings"]
-            if "ET" not in str(f).upper() and "XT" not in str(f).upper()
-        ]
+    raw_findings = pred.get("patient_findings")
+    if not isinstance(raw_findings, list) or len(raw_findings) == 0:
+        raw_findings = pred.get("findings")
+    out.pop("patient_findings", None)
+    if isinstance(raw_findings, list):
+        cleaned: List[str] = []
+        for f in raw_findings:
+            safe = _sanitize_patient_finding_text(f)
+            if safe and safe not in cleaned:
+                cleaned.append(safe)
+        out["findings"] = cleaned
     return out
 
 
@@ -140,14 +221,116 @@ def sanitize_detail_for_patient(test_name: str, details: Optional[Dict[str, Any]
             if k in qg
         }
 
+    if test_name == "visual_acuity":
+        if details.get("skipped"):
+            return {"skipped": True, "test_status": details.get("test_status", "skipped")}
+        if details.get("test_status"):
+            out["test_status"] = details["test_status"]
+        if details.get("measurement_valid") is False:
+            out["measurement_valid"] = False
+            return out
+        od = details.get("od") if isinstance(details.get("od"), dict) else {}
+        os = details.get("os") if isinstance(details.get("os"), dict) else {}
+        out["od_label"] = (
+            od.get("screening_line_label")
+            or od.get("snellen_label")
+            or (f"~6/{od['snellen_denominator']} screening" if od.get("snellen_denominator") else None)
+        )
+        out["os_label"] = (
+            os.get("screening_line_label")
+            or os.get("snellen_label")
+            or (f"~6/{os['snellen_denominator']} screening" if os.get("snellen_denominator") else None)
+        )
+        if details.get("inter_eye_lines_diff") is not None:
+            out["inter_eye_lines_diff"] = details["inter_eye_lines_diff"]
+        if details.get("test_distance_cm") is not None:
+            out["test_distance_cm"] = details["test_distance_cm"]
+        if "calibrated" in details:
+            out["calibrated"] = details["calibrated"]
+        if details.get("measurement_type"):
+            out["measurement_type"] = details["measurement_type"]
+        out["notation_disclaimer"] = details.get("notation") or (
+            "uncalibrated near-screen estimate; not equivalent to clinic Snellen"
+        )
+        if details.get("measurement_valid") is True:
+            out["measurement_valid"] = True
+        return out
+
+    if test_name == "gaze":
+        gsi = details.get("max_gaze_stability_index")
+        out["measurement_type"] = details.get("measurement_type", "gaze_alignment_proxy")
+        if gsi is not None:
+            g = float(gsi)
+            if g >= 15:
+                out["screening_status"] = "needs review"
+            elif g >= 8:
+                out["screening_status"] = "notable alignment screening signal"
+            else:
+                out["screening_status"] = "within screening range"
+        else:
+            out["screening_status"] = "not assessable"
+        return out
+
+    if test_name == "prism":
+        out["measurement_type"] = details.get("measurement_type", "alignment_screening_proxy")
+        out["occlusion_verified"] = details.get("occlusion_verified", False)
+        idx = details.get("alignment_proxy_index")
+        if idx is not None:
+            p = float(idx)
+            if p >= 15:
+                out["screening_status"] = "needs review"
+            elif p >= 5:
+                out["screening_status"] = "notable alignment screening signal"
+            else:
+                out["screening_status"] = "within screening range"
+        else:
+            out["screening_status"] = "not assessable"
+        return out
+
     if test_name == "titmus":
         out["passed"] = details.get("passed")
         out["total"] = details.get("total")
+        out["measurement_type"] = details.get("measurement_type", "stereo_screening_proxy")
+        out["stereo_screening_proxy"] = details.get("stereo_screening_proxy", True)
+        out["true_stereopsis_test"] = details.get("true_stereopsis_test", False)
+        if details.get("test_status"):
+            out["test_status"] = details["test_status"]
         return out
 
-    if test_name == "visual_acuity":
-        if "snellen_denominator" in details:
-            out["snellen_denominator"] = details["snellen_denominator"]
+    if test_name == "hirschberg":
+        out["measurement_type"] = details.get("measurement_type", "hirschberg_alignment_proxy")
+        if details.get("test_status") == "incomplete":
+            out["test_status"] = "incomplete"
+            out["measurement_valid"] = False
+            out["screening_status"] = "not assessable"
+        elif details.get("confidence") == "low":
+            out["measurement_valid"] = False
+            out["note"] = "low_sample_count"
+            out["screening_status"] = "repeat screening recommended"
+        else:
+            mm = details.get("displacement_mm")
+            if mm is not None:
+                m = float(mm)
+                if m >= 4:
+                    out["screening_status"] = "needs review"
+                elif m >= 2:
+                    out["screening_status"] = "notable alignment screening signal"
+                else:
+                    out["screening_status"] = "within screening range"
+            else:
+                out["screening_status"] = "recorded"
+            out["measurement_valid"] = True
+        return out
+
+    if test_name == "red_reflex":
+        cls = str(details.get("classification") or "").lower()
+        out["measurement_type"] = details.get("measurement_type", "red_reflex_screening")
+        if cls in ("leukocoria", "white", "absent", "media_opacity"):
+            out["screening_status"] = "urgent eye-care review recommended"
+        elif cls in ("dim", "indeterminate"):
+            out["screening_status"] = "result needs doctor review"
+        elif cls:
+            out["screening_status"] = "no major screening concern on this pass"
         return out
 
     return out

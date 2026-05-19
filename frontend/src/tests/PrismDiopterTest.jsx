@@ -158,7 +158,14 @@ export default function PrismDiopterTest({ patient, onComplete, flowIndex, flowT
       onComplete?.({
         raw_score: 0,
         normalized_score: 0,
-        details: { error: true, reason: "insufficient_samples", rightSamples: rs.length, leftSamples: ls.length },
+        details: {
+          error: true,
+          reason: "insufficient_samples",
+          rightSamples: rs.length,
+          leftSamples: ls.length,
+          test_status: "incomplete",
+          measurement_valid: false,
+        },
       });
       return;
     }
@@ -183,16 +190,19 @@ export default function PrismDiopterTest({ patient, onComplete, flowIndex, flowT
     const risk = classifyRisk(estimatedPD);
 
     const normalized = Math.max(0, Math.min(1, Math.abs(estimatedPD) / 30));
-    speak(`Prism measurement complete.`, { lang });
+    speak(`Alignment screening step complete.`, { lang });
     onComplete?.({
       raw_score: +estimatedPD.toFixed(2),
       normalized_score: +normalized.toFixed(3),
       details: {
-        // requested outputs
+        measurement_type: "alignment_screening_proxy",
+        alignment_proxy_index: +estimatedPD.toFixed(2),
         estimatedPD: +estimatedPD.toFixed(2),
+        max_prism_diopters: +estimatedPD.toFixed(2),
+        occlusion_verified: false,
+        measurement_validity: "proxy",
         asymmetry: +Math.abs(estimatedPD).toFixed(2),
         risk,
-        // capture details
         rightEyeFixation: { x: +rX.toFixed(4), y: +rY.toFixed(4) },
         leftEyeFixation: { x: +lX.toFixed(4), y: +lY.toFixed(4) },
         shiftPx: +shiftPx.toFixed(2),
@@ -213,10 +223,10 @@ export default function PrismDiopterTest({ patient, onComplete, flowIndex, flowT
   }, [step, finish]);
 
   const title =
-    step.startsWith("cover_left") ? "Cover test · Left eye covered" :
-    step.startsWith("cover_right") ? "Cover test · Right eye covered" :
+    step.startsWith("cover_left") ? "Alignment proxy · Left covered" :
+    step.startsWith("cover_right") ? "Alignment proxy · Right covered" :
     step === "analyzing" ? "Analyzing" :
-    "Prism Diopter";
+    "Alignment screening";
 
   const sub =
     step.endsWith("_intro")

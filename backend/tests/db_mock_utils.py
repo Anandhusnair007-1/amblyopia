@@ -13,9 +13,10 @@ def mock_db_for_complete_session(
     m = MagicMock()
     pid = sess_doc.get("patient_id", "p1")
     m.test_sessions.find_one = AsyncMock(return_value=sess_doc)
-    m.patients.find_one = AsyncMock(
-        return_value=patient_hospital or {"id": pid, "hospital_id": sess_doc.get("hospital_id", "h1")}
-    )
+    base_patient = {"id": pid, "hospital_id": sess_doc.get("hospital_id", "h1"), "age": 8}
+    if patient_hospital:
+        base_patient.update(patient_hospital)
+    m.patients.find_one = AsyncMock(return_value=base_patient)
     fc = MagicMock()
     fc.to_list = AsyncMock(return_value=result_rows)
     m.test_results.find = MagicMock(return_value=fc)
@@ -23,6 +24,9 @@ def mock_db_for_complete_session(
     m.ai_predictions.find_one = AsyncMock(return_value=None)
     m.ai_predictions.insert_one = AsyncMock()
     m.test_sessions.update_one = AsyncMock()
+    m.test_results.update_many = AsyncMock()
+    m.test_results.find_one = AsyncMock(return_value=None)
+    m.test_results.insert_one = AsyncMock()
     m.patients.update_one = AsyncMock()
     m.referrals.insert_one = AsyncMock()
     return m
@@ -37,9 +41,17 @@ def mock_db_for_get_session(
     m = MagicMock()
     m.test_sessions.find_one = AsyncMock(return_value=sess_doc)
     m.patients.find_one = AsyncMock(return_value=patient_doc)
-    fc = MagicMock()
-    fc.to_list = AsyncMock(return_value=[])
-    m.test_results.find = MagicMock(return_value=fc)
+    class RC:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def sort(self, *a, **kw):
+            return self
+
+        async def to_list(self, n):
+            return self.rows
+
+    m.test_results.find = MagicMock(return_value=RC([]))
     m.ai_predictions.find_one = AsyncMock(return_value=pred)
     m.doctor_diagnoses.find_one = AsyncMock(return_value=None)
     rows = insights_rows or []

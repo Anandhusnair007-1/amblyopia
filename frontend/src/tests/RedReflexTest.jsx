@@ -67,9 +67,17 @@ export default function RedReflexTest({ patient, onComplete, flowIndex, flowTota
       speak("Red reflex analysis complete.", { lang });
       const riskMap = { normal: 0.05, dim: 0.4, media_opacity: 0.55, leukocoria: 0.95, absent: 0.9, indeterminate: 0.3 };
       const normalized = riskMap[classification] ?? 0.3;
+      const incomplete = classification === "indeterminate";
       setTimeout(() => onComplete({
         raw_score: normalized, normalized_score: normalized,
-        details: { classification, samples: samples.length, hsv_left: hsvL, hsv_right: hsvR },
+        details: {
+          classification,
+          samples: samples.length,
+          hsv_left: hsvL,
+          hsv_right: hsvR,
+          test_status: incomplete ? "incomplete" : "completed",
+          measurement_valid: !incomplete,
+        },
       }), 900);
     }, 2000);
     return () => clearTimeout(t);

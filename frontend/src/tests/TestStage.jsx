@@ -11,9 +11,11 @@ import WebRTCCamera from "@/core/camera/WebRTCCamera";
 import { loadLandmarker, detectFace, estimateDistanceCm, gazeRatios, normalizeAgeYears } from "@/core/camera/MediaPipeSetup";
 import FaceGuide from "@/components/ambyo/FaceGuide";
 import CountdownOverlay from "@/components/ambyo/CountdownOverlay";
-import { speak, NARRATION, useAudioStore } from "@/core/audio/AudioGuide";
+import { speak, NARRATION, useAudioStore, primeSpeech } from "@/core/audio/AudioGuide";
 import { useI18n } from "@/core/i18n/translations";
 import TestProgressBar from "@/components/ambyo/TestProgressBar";
+import ScreenCalibrationPanel from "@/components/ambyo/ScreenCalibrationPanel";
+import { loadScreenCalibration } from "@/core/vision/ScreenCalibration";
 
 /**
  * Props:
@@ -21,6 +23,7 @@ import TestProgressBar from "@/components/ambyo/TestProgressBar";
  *  - distanceRange: [min, max]   (cm)
  *  - age: number   (for face-width calibration)
  *  - requireCamera: bool (default true). For prism we skip camera entirely.
+ *  - requireStableDistance: bool (default true). Blocks manual start until distance is in range.
  *  - skipGate: bool — if true, reveal children immediately (no positioning gate / countdown)
  *  - onFaceData: (face, gaze) => void  — called every frame when face detected
  *  - cameraOutRef: optional ref object; .current is set to the HTMLVideoElement when the stream is ready (for tests that need the same camera as the stage, e.g. red reflex sampling).
@@ -32,6 +35,7 @@ export default function TestStage({
   distanceRange = [35, 45],
   age = 8,
   requireCamera = true,
+  requireStableDistance = true,
   skipGate = false,
   onFaceData,
   cameraOutRef,
@@ -48,7 +52,9 @@ export default function TestStage({
   const [goodHoldMs, setGoodHoldMs] = useState(0);
   const lastGoodTsRef = useRef(null);
   const introSpokenRef = useRef(false);
+  const positionSpokenRef = useRef(null);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [calibration, setCalibration] = useState(() => loadScreenCalibration());
 
   useEffect(() => {
     if (!requireCamera) {
@@ -66,8 +72,26 @@ export default function TestStage({
     if (introSpokenRef.current) return;
     if (phase !== "intro" && phase !== "active") return;
     const script = NARRATION[testId]?.[lang] || NARRATION[testId]?.en;
-    if (script) { speak(script, { lang, key: `intro-${testId}` }); introSpokenRef.current = true; }
+    if (script) {
+      primeSpeech();
+      speak(script, { lang, key: `intro-${testId}` });
+      introSpokenRef.current = true;
+    }
   }, [testId, lang, phase]);
+
+  // Spoken distance hints during intro (throttled)
+  useEffect(() => {
+    if (phase !== "intro" || !requireCamera || muted) return;
+    const [min, max] = distanceRange;
+    let key = "good";
+    if (distance == null) key = "no_face";
+    else if (distance < min) key = "too_close";
+    else if (distance > max) key = "too_far";
+    if (positionSpokenRef.current === key) return;
+    positionSpokenRef.current = key;
+    const script = NARRATION.positioning?.[key]?.[lang] || NARRATION.positioning?.[key]?.en;
+    if (script) speak(script, { lang, key: `pos-${key}`, rate: 1.05 });
+  }, [phase, distance, distanceRange, lang, muted, requireCamera]);
 
   // Frame callback — distance + gaze
   const onFrame = useCallback((video, ts) => {
@@ -115,6 +139,9 @@ export default function TestStage({
   const countdownDone = useCallback(() => setPhase("active"), []);
 
   const ready = phase === "active";
+  const [minDistance, maxDistance] = distanceRange;
+  const distanceValid = !requireCamera || (distance != null && distance >= minDistance && distance <= maxDistance);
+  const canManuallyStart = !requireStableDistance || distanceValid;
 
   return (
     <section className="relative z-20 h-full min-h-0 overflow-hidden">
@@ -167,19 +194,32 @@ export default function TestStage({
                     </p>
                     <p className="mt-2 text-xs text-slate-400">
                       {t("status")}:{" "}
-                      <span className={faceDetected ? "text-emerald-300" : "text-amber-300"}>
-                        {faceDetected ? t("face_detected") : t("no_face_detected")}
+                      <span className={faceDetected && distanceValid ? "text-emerald-300" : "text-amber-300"}>
+                        {faceDetected ? (distanceValid ? t("face_detected") : t("position_face_inside_oval")) : t("no_face_detected")}
                       </span>
                     </p>
+                    {testId === "visual_acuity" && (
+                      <p className="mt-2 text-xs text-slate-400">
+                        {calibration
+                          ? "Screen calibration saved for this device."
+                          : "Calibration missing: acuity will be stored as near-screen screening estimate only."}
+                      </p>
+                    )}
                   </div>
                   <button
                     data-testid="stage-start-manual"
                     onClick={triggerCountdown}
-                    className="shrink-0 rounded-2xl bg-teal-500 px-5 py-3 text-sm font-extrabold text-[#0A0F1C] shadow-md hover:bg-teal-400 transition-all"
+                    disabled={!canManuallyStart}
+                    className="shrink-0 rounded-2xl bg-teal-500 px-5 py-3 text-sm font-extrabold text-[#0A0F1C] shadow-md transition-all hover:bg-teal-400 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     {t("start")}
                   </button>
                 </div>
+                {testId === "visual_acuity" && (
+                  <div className="mt-4">
+                    <ScreenCalibrationPanel onCalibrated={setCalibration} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -204,7 +244,9 @@ export default function TestStage({
               />
             </div>
           )}
-          {typeof children === "function" ? children({ ready, distance, cameraReady, muted }) : children}
+          {typeof children === "function"
+            ? children({ ready, distance, distanceValid, cameraReady, muted, calibration })
+            : children}
         </div>
       )}
 

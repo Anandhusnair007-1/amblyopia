@@ -26,9 +26,24 @@ def test_completed_session_has_version_fields(monkeypatch):
     captured_session_update = {}
 
     RESULTS = [
-        {"test_name": "visual_acuity", "raw_score": 1, "normalized_score": 1, "details": {"snellen_denominator": 6}},
+        {
+            "test_name": "visual_acuity",
+            "raw_score": 6,
+            "normalized_score": 1,
+            "details": {
+                "measurement_valid": True,
+                "test_status": "completed",
+                "od": {"snellen_denominator": 6},
+                "os": {"snellen_denominator": 6},
+            },
+        },
         {"test_name": "gaze", "raw_score": 0.1, "normalized_score": 0.1, "details": {"max_deviation_pd": 2}},
-        {"test_name": "hirschberg", "raw_score": 0.1, "normalized_score": 0.1, "details": {"displacement_mm": 0.5}},
+        {
+            "test_name": "hirschberg",
+            "raw_score": 0.1,
+            "normalized_score": 0.1,
+            "details": {"displacement_mm": 0.5, "samples": 8},
+        },
         {"test_name": "prism", "raw_score": 2, "normalized_score": 0.1, "details": {"max_prism_diopters": 2}},
         {"test_name": "titmus", "raw_score": 1, "normalized_score": 1, "details": {"passed": 3, "total": 3}},
         {"test_name": "red_reflex", "raw_score": 1, "normalized_score": 1, "details": {"classification": "normal"}},
@@ -146,6 +161,7 @@ def test_get_session_doctor_strabismus_ai_when_condition_present(monkeypatch):
 def test_get_session_patient_strabismus_ai_patient_safe(monkeypatch):
     import server as srv
 
+    pred = {"risk_level": "normal", "findings": [], "patient_findings": []}
     insight = {
         "condition": "XT",
         "confidence": 0.94,
@@ -155,9 +171,9 @@ def test_get_session_patient_strabismus_ai_patient_safe(monkeypatch):
         "created_at": "2026-01-01T00:00:00+00:00",
     }
     mock_db = mock_db_for_get_session(
-        {"id": "s1", "patient_id": "p1"},
+        {"id": "s1", "patient_id": "p1", "status": "completed"},
         {"id": "p1", "name": "Test", "date_of_birth": "2015-01-01"},
-        None,
+        pred,
         insights_rows=None,
     )
     mock_db.ai_deviation_insights.find_one = AsyncMock(return_value=insight)
@@ -165,7 +181,9 @@ def test_get_session_patient_strabismus_ai_patient_safe(monkeypatch):
 
     out = asyncio.run(srv.get_session("s1", {"sub": "p1", "role": "patient"}))
     sa = out["strabismus_ai"]
-    assert sa["risk"] == "urgent"
+    assert sa["risk"] != "urgent"
+    assert sa["risk"] == "mild"
     assert sa["screening_complete"] is True
     assert "confidence" not in sa
     assert "condition" not in sa
+    assert "reviewed by an eye-care professional" in sa["recommendation"].lower()

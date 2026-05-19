@@ -11,6 +11,11 @@ API = f"{BASE_URL}/api"
 DOCTOR_EMAIL = "doctor@aravind.in"
 DOCTOR_PASS = "aravind2026"
 
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_BACKEND_E2E") != "1",
+    reason="live backend E2E tests require RUN_BACKEND_E2E=1 and REACT_APP_BACKEND_URL",
+)
+
 
 def _phone() -> str:
     # Unique 10-digit phone per test run to avoid collision with existing patients
@@ -333,6 +338,38 @@ class TestDoctorEndpoints:
 
 
 # ── Classifier — normal case ──────────────────────────────────────────────────
+class TestClassifierFrontendFields:
+    def test_hirschberg_with_va_corroboration_urgent(self):
+        from clinical_classifier import classify_risk
+
+        pred = classify_risk(
+            [
+                {
+                    "test_name": "visual_acuity",
+                    "raw_score": 24,
+                    "normalized_score": 0.5,
+                    "details": {
+                        "measurement_valid": True,
+                        "od": {"snellen_denominator": 24},
+                        "os": {"snellen_denominator": 6},
+                    },
+                },
+                {
+                    "test_name": "hirschberg",
+                    "raw_score": 100,
+                    "normalized_score": 0.9,
+                    "details": {
+                        "leftDisplacementMM": 5.0,
+                        "rightDisplacementMM": 1.0,
+                        "samples": 10,
+                    },
+                },
+            ],
+            patient_age=8,
+        )
+        assert pred["risk_level"] == "urgent"
+
+
 class TestClassifierNormal:
     def test_all_in_range_returns_normal(self, s, doctor_token):
         # New patient
@@ -344,12 +381,17 @@ class TestClassifierNormal:
         sess = s.post(f"{API}/sessions", headers=hdr(tok), json={}).json()
         sid = sess["id"]
         normals = [
-            {"test_name": "visual_acuity", "raw_score": 1.0, "normalized_score": 1.0,
-             "details": {"snellen_denominator": 6}},
+            {"test_name": "visual_acuity", "raw_score": 6, "normalized_score": 1.0,
+             "details": {
+                 "measurement_valid": True,
+                 "test_status": "completed",
+                 "od": {"snellen_denominator": 6},
+                 "os": {"snellen_denominator": 6},
+             }},
             {"test_name": "gaze", "raw_score": 0.02, "normalized_score": 0.02,
              "details": {"max_deviation_pd": 2}},
             {"test_name": "hirschberg", "raw_score": 0.1, "normalized_score": 0.1,
-             "details": {"displacement_mm": 0.5}},
+             "details": {"displacement_mm": 0.5, "samples": 10}},
             {"test_name": "prism", "raw_score": 2, "normalized_score": 0.1,
              "details": {"max_prism_diopters": 2}},
             {"test_name": "titmus", "raw_score": 1, "normalized_score": 1,

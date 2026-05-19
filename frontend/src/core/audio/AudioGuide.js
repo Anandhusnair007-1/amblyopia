@@ -6,6 +6,22 @@ const LANG_MAP = { en: "en-IN", ta: "ta-IN", ml: "ml-IN", hi: "hi-IN" };
 
 let voicesCache = null;
 let loadingVoices = null;
+let activeSpeakPromise = null;
+
+/** Prime voices on first user interaction (helps iOS / Android). */
+export function primeSpeech() {
+  if (!("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.resume?.();
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    window.speechSynthesis.cancel();
+  } catch {
+    /* ignore */
+  }
+  void ensureVoices();
+}
 
 const loadVoices = () =>
   new Promise((resolve) => {
@@ -50,42 +66,86 @@ export const useAudioStore = create((set, get) => ({
 export async function speak(text, { lang = "en", rate = 0.95, pitch = 1.0, key = null } = {}) {
   if (!("speechSynthesis" in window)) return;
   if (useAudioStore.getState().muted) return;
-  try {
-    window.speechSynthesis.cancel(); // interrupt any previous
-  } catch (e) {}
-  const voices = await ensureVoices();
-  const utter = new SpeechSynthesisUtterance(text);
-  const bcp47 = LANG_MAP[lang] || "en-IN";
-  const v = pickVoice(voices, bcp47);
-  if (v) utter.voice = v;
-  utter.lang = bcp47;
-  utter.rate = rate;
-  utter.pitch = pitch;
-  useAudioStore.setState({ speakingKey: key });
-  return new Promise((resolve) => {
-    utter.onend = () => {
-      useAudioStore.setState({ speakingKey: null });
-      resolve();
-    };
-    utter.onerror = () => {
-      useAudioStore.setState({ speakingKey: null });
-      resolve();
-    };
-    try { window.speechSynthesis.speak(utter); } catch { resolve(); }
-  });
+  const run = async () => {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
+    const voices = await ensureVoices();
+    const utter = new SpeechSynthesisUtterance(text);
+    const bcp47 = LANG_MAP[lang] || "en-IN";
+    const v = pickVoice(voices, bcp47);
+    if (v) utter.voice = v;
+    utter.lang = bcp47;
+    utter.rate = rate;
+    utter.pitch = pitch;
+    useAudioStore.setState({ speakingKey: key });
+    return new Promise((resolve) => {
+      const done = () => {
+        useAudioStore.setState({ speakingKey: null });
+        resolve();
+      };
+      utter.onend = done;
+      utter.onerror = done;
+      try {
+        window.speechSynthesis.resume?.();
+        window.speechSynthesis.speak(utter);
+        // Chrome pauses synthesis until resume; nudge if still pending after 250ms
+        setTimeout(() => {
+          if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) return;
+          try {
+            window.speechSynthesis.resume?.();
+          } catch {
+            /* ignore */
+          }
+        }, 250);
+      } catch {
+        done();
+      }
+    });
+  };
+  activeSpeakPromise = (activeSpeakPromise || Promise.resolve()).then(run, run);
+  return activeSpeakPromise;
 }
 
 export function stopSpeaking() {
-  try { window.speechSynthesis.cancel(); } catch (e) {}
+  try {
+    window.speechSynthesis.cancel();
+  } catch {
+    /* ignore */
+  }
+  useAudioStore.setState({ speakingKey: null });
+}
+
+/** Wait until narration finishes (used before opening the mic). */
+export async function waitForSpeechIdle(maxWaitMs = 12000) {
+  const start = performance.now();
+  while (performance.now() - start < maxWaitMs) {
+    const busy =
+      useAudioStore.getState().speakingKey != null ||
+      (typeof window !== "undefined" &&
+        window.speechSynthesis?.speaking &&
+        !window.speechSynthesis?.paused);
+    if (!busy) return;
+    await new Promise((r) => setTimeout(r, 80));
+  }
+}
+
+export function isSpeaking() {
+  return (
+    useAudioStore.getState().speakingKey != null ||
+    !!(typeof window !== "undefined" && window.speechSynthesis?.speaking)
+  );
 }
 
 // Pre-written narration scripts per test, per language.
 // Keep sentences short and slow — children comprehension.
 export const NARRATION = {
   visual_acuity: {
-    en: "Visual acuity test. Sit about forty centimetres from the screen. When a letter appears, tell me which direction it points. Up, down, left, or right.",
-    ta: "பார்வை சோதனை. திரைக்கு நாற்பது சென்டிமீட்டர் தூரத்தில் உட்காரவும். எழுத்து தோன்றும்போது அது எந்த திசையை நோக்கியது என சொல்லுங்கள்.",
-    ml: "കാഴ്ച പരിശോധന. സ്ക്രീനിൽ നിന്ന് നാല്‍പ്പത് സെന്റിമീറ്റർ ദൂരത്തിൽ ഇരിക്കുക. അക്ഷരം കാണുമ്പോൾ ദിശ പറയുക.",
+    en: "Visual acuity test at forty centimetres. We will test each eye separately. First cover your left eye and test the right eye. Then cover the right eye and test the left. Say which way the E points, or tap the arrow.",
+    ta: "நாற்பது செ.மீ தூரத்தில் பார்வை சோதனை. ஒவ்வொரு கண்ணையும் தனித்தனி பரிசோதிக்கிறோம். முதலில் இடது கண்ணை மூடி வலது கண்ணை சோதிக்கவும்.",
+    ml: "നാല്പ്പത് സെ.മീ ദൂരത്തിൽ കാഴ്ച പരിശോധന. ഓരോ കണ്ണും വെവ്വേറെ പരിശോധിക്കും. ആദ്യം ഇടത് കണ്ണ് മൂടി വലത് കണ്ണ് പരിശോധിക്കുക.",
   },
   gaze: {
     en: "Gaze test. Keep your head still and follow the blue dot with only your eyes. Nine dots will appear.",

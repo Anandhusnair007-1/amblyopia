@@ -39,7 +39,7 @@ const RISK_FILTERS = [
   { key: "urgent", label: "Urgent" },
   { key: "moderate", label: "Moderate" },
   { key: "mild", label: "Mild" },
-  { key: "normal", label: "Normal" },
+  { key: "normal", label: "No major concern" },
 ];
 
 const REVIEW_FILTERS = [

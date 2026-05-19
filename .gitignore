@@ -9,8 +9,12 @@ venv/
 
 # Environment
 .env
+.env.local
+.env.production
 .env.*
 *.env
+backend/.env
+frontend/.env
 !backend/.env.production.example
 !frontend/.env.production.example
 
@@ -35,7 +39,7 @@ frontend/public/models/
 Image_Summary_With_Embedded_Images1(Cropped Results).csv
 =
 CACHED
-[internal]
+[[]internal]
 reading
 transferring
 
@@ -51,7 +55,10 @@ ssl/
 
 # Build & System
 build/
+frontend/build/
 dist/
+coverage/
+.pytest_cache/
 .DS_Store
 Thumbs.db
 *.log

@@ -1,19 +1,22 @@
-# AmbyoAI — Pediatric Amblyopia Screening
+# AmbyoAI — Pediatric Amblyopia Screening/Support Prototype
 
-India's first browser-based pediatric amblyopia (lazy eye) screening PWA — built for Aravind Eye Hospital, Coimbatore.
+AmbyoAI is a browser-based lazy eye / amblyopia screening and support prototype for supervised internal demo, doctor review, staging preparation, and clinical validation planning.
 
-Six clinical tests. Zero equipment. Works offline. Powered by AI.
+This project is not a diagnostic medical device. It does not diagnose lazy eye, prescribe glasses, determine patching treatment, or replace an ophthalmologist. Clinical validation is required before public medical claims.
+
+Release `v0.1-clinical-demo` is intended for internal demo and doctor review only.
 
 ## Highlights
 
 - **Two portals**: Patient (phone + OTP) and Doctor (email + password)
-- **Six clinical tests**: Visual Acuity, Gaze Detection (MediaPipe), Hirschberg, Prism Diopter, Titmus Stereo, Red Reflex
+- **Screening/support modules**: Visual acuity estimate, gaze/fixation proxy, Hirschberg/alignment proxy, prism/alignment proxy, depth/stereo proxy, red reflex safety flow
+- **Age-based routing**: Test flow adapts to infant / child / adult / senior bands
 - **Audio guidance**: Multilingual TTS narration (English / தமிழ் / മലയാളം)
 - **Face positioning overlay**: Pulsing oval with quantified distance guidance ("Move back 8 cm")
-- **AI risk classifier**: Clinical-fallback thresholds validated against 28 test cases
-- **Hospital-grade medical report**: Severity-graded findings with clinical interpretations + PDF + urgent referral letter
+- **Clinical safety rules**: Backend age/test enforcement, incomplete/unreliable states, urgent review routing, and patient-safe AI output
+- **Doctor review reports**: Severity-graded screening findings, doctor-only details, PDF export, audit logging, and referral workflow support
 - **Enterprise UI**: Glass-morphism, Framer Motion animations, dark test-runner theme, light clinical portals
-- **Progressive Web App**: Installable, offline-capable, service worker + IndexedDB queue
+- **Progressive Web App**: Installable, offline-capable, service worker + minimized IndexedDB queue
 
 ## Stack
 
@@ -31,7 +34,7 @@ Six clinical tests. Zero equipment. Works offline. Powered by AI.
 ├─ backend/             FastAPI + MongoDB server
 │  ├─ server.py         All /api routes (auth, patient, doctor, sessions, classifier)
 │  ├─ requirements.txt
-│  └─ tests/            pytest suite (28 cases)
+│  └─ tests/            pytest suite
 ├─ frontend/
 │  ├─ public/           manifest.json, service worker, icons
 │  └─ src/
@@ -77,7 +80,17 @@ yarn start
 | **Doctor** | `doctor@aravind.in` / `aravind2026` |
 | **Patient OTP** | Demo OTP `1234` (works for any 10-digit phone) |
 
-## Clinical thresholds (fallback classifier)
+## Safety Positioning
+
+- Screening/support only.
+- Not a final diagnosis.
+- Does not prescribe glasses.
+- Does not determine patching treatment.
+- Does not replace an ophthalmologist or qualified eye-care professional.
+- Abnormal, incomplete, unreliable, urgent, or parent-concern cases should be reviewed by an eye-care professional.
+- Clinical validation is required before public medical claims.
+
+## Clinical-rule thresholds (screening support)
 
 | Finding | Urgent | Moderate/High | Mild |
 |---------|--------|---------------|------|
@@ -89,12 +102,19 @@ yarn start
 
 ## Tests
 
-- Backend: `pytest backend/tests/` — 28/28 ✅
-- Frontend: End-to-end testing via Playwright subagent — 100% ✅
+- Backend: `cd backend && python3 -m pytest -v`
+- Frontend: `cd frontend && npm test -- --watchAll=false`
+- Build: `cd frontend && npm run build`
+
+Current v0.1 clinical-demo package result:
+
+- Backend: 65 passed, 37 skipped, 0 failed
+- Frontend: 27 passed, 0 failed
+- Build: succeeded with documented warnings
 
 ## License
 
-Private — Aravind Eye Hospital pilot deployment.
+Private prototype.
 
 ## Roadmap
 

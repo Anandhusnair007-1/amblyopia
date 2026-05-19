@@ -76,7 +76,15 @@ export default function TitmusTest({ patient, onComplete, flowIndex, flowTotal, 
     speak(`You got ${passed} of ${subTests.length} correct.`, { lang });
     onComplete({
       raw_score: passed, normalized_score: 1 - normalized,
-      details: { passed, total: subTests.length, results: arr, profile },
+      details: {
+        passed,
+        total: subTests.length,
+        results: arr,
+        profile,
+        measurement_type: "stereo_screening_proxy",
+        true_stereopsis_test: false,
+        measurement_validity: "proxy",
+      },
     });
   };
 
@@ -96,7 +104,7 @@ export default function TitmusTest({ patient, onComplete, flowIndex, flowTotal, 
           </div>
 
       <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 text-center sm:top-20">
-        <p className="text-xs font-semibold tracking-wide text-teal-300">Titmus Stereo · {step + 1}/{subTests.length}</p>
+        <p className="text-xs font-semibold tracking-wide text-teal-300">Depth screening · {step + 1}/{subTests.length}</p>
       </div>
 
       <AnimatePresence mode="wait">

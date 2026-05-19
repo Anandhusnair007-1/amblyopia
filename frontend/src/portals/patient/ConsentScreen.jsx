@@ -78,7 +78,7 @@ export default function ConsentScreen() {
       }
       try {
         const s = await api.post("/sessions", { patient_id: patient.id });
-        nav(`/patient/session/${s.data.id}/test/0`);
+        nav(`/patient/session/${s.data.id}/history`);
       } catch (e) {
         if (shouldQueue(e)) {
           await queueSessionCreate({ patient_id: patient.id });

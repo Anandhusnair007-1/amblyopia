@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { queueSessionCreate } from "@/core/offline/db";
 import { shouldQueue } from "@/core/offline/useOfflineSync";
 import { useI18n } from "@/core/i18n/translations";
+import { getTestFlowForAge, isTestAllowedForAge } from "@/core/clinical/ageTestRouter";
 
 // Boots a single-test session and forwards to the test runner in ?quick=1 mode.
 export default function QuickTest() {
@@ -12,10 +13,6 @@ export default function QuickTest() {
   const { testId } = useParams();
   const [error, setError] = useState(null);
   const { t } = useI18n();
-
-  const IDX = {
-    visual_acuity: 0, gaze: 1, hirschberg: 2, prism: 3, titmus: 4, red_reflex: 5,
-  };
 
   useEffect(() => {
     const run = async () => {
@@ -40,8 +37,15 @@ export default function QuickTest() {
           }
           throw e;
         }
-        const idx = IDX[testId] ?? 0;
-        nav(`/patient/session/${s.data.id}/test/${idx}?quick=1`);
+        const age = me.data.patient?.age ?? 8;
+        if (!isTestAllowedForAge(testId, age)) {
+          toast.error(t("quick_test_not_for_age"));
+          nav("/patient");
+          return;
+        }
+        const flow = getTestFlowForAge(age);
+        const idx = flow.findIndex((s) => s.id === testId);
+        nav(`/patient/session/${s.data.id}/test/${idx >= 0 ? idx : 0}?quick=1`);
       } catch (e) {
         toast.error(e?.response?.data?.detail || t("quick_test_could_not_start"));
         nav("/patient");

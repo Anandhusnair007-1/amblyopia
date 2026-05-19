@@ -33,10 +33,10 @@ const SEV_STYLE = {
 
 const TESTS = {
   visual_acuity: "Visual Acuity",
-  gaze: "Gaze Deviation",
-  hirschberg: "Hirschberg",
-  prism: "Prism Diopter",
-  titmus: "Titmus Stereo",
+  gaze: "Gaze stability screening",
+  hirschberg: "Hirschberg alignment estimate",
+  prism: "Alignment screening proxy",
+  titmus: "Depth screening",
   red_reflex: "Red Reflex",
   heidelberg: "Heidelberg (Proxy)",
 };
@@ -235,6 +235,7 @@ export default function DoctorReport() {
     patient,
     session,
     results = [],
+    result_history = [],
     prediction = {},
     strabismus_ai: strabismusFromPayload,
   } = data;
@@ -346,6 +347,22 @@ export default function DoctorReport() {
       <PatientContextBar patient={patient} session={session} prediction={prediction} consentSummary="On file" />
       {urgent && <UrgentBanner findings={prediction.findings || []} />}
 
+      {session?.screening_history && Object.keys(session.screening_history).length > 0 && (
+        <section data-testid="screening-history">
+          <DashboardCard className="p-5">
+            <h2 className="text-lg font-bold tracking-tight text-[#0A2540]">Screening history (patient-reported)</h2>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2 text-sm">
+              {Object.entries(session.screening_history).map(([key, val]) => (
+                <li key={key} className="flex justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                  <span className="text-muted-foreground">{key.replace(/_/g, " ")}</span>
+                  <span className="font-semibold text-foreground">{val ? "Yes" : "No"}</span>
+                </li>
+              ))}
+            </ul>
+          </DashboardCard>
+        </section>
+      )}
+
       <Dialog open={wrongPatientOpen} onOpenChange={setWrongPatientOpen}>
         <DialogContent>
           <DialogHeader>
@@ -453,7 +470,7 @@ export default function DoctorReport() {
           {medical.length === 0 ? (
             <DashboardCard className="p-5 md:col-span-2">
               <p className="text-sm text-muted-foreground">
-                No abnormal findings flagged. All measured values within normal clinical thresholds.
+                No major screening concern was flagged in the completed measurements. Confirm clinically before reassurance.
               </p>
             </DashboardCard>
           ) : (
@@ -519,6 +536,36 @@ export default function DoctorReport() {
         </div>
       </section>
 
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Activity size={16} className="text-teal-700" />
+          <h2 className="text-lg font-bold tracking-tight text-[#0A2540]">Result revision history</h2>
+        </div>
+        <DashboardCard className="p-5">
+          {result_history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No previous attempts recorded for this session.</p>
+          ) : (
+            <div className="space-y-3">
+              {result_history.slice(0, 12).map((r) => (
+                <div key={r.id} className="rounded-xl border border-border bg-muted/30 p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono font-semibold text-[#0A2540]">
+                      {r.test_name} · rev {r.revision || 1} · {r.result_state || r.details?.test_status || "completed"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</span>
+                  </div>
+                  <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                    <span>Age at test: {r.age_at_test ?? "—"}</span>
+                    <span>Rule: {r.rule_version || "—"}</span>
+                    <span>Calibrated: {r.calibration_info?.px_per_mm ? "yes" : "no"}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DashboardCard>
+      </section>
+
       <DashboardCard className="p-6 sm:p-8">
         <h2 className="text-lg font-bold tracking-tight text-[#0A2540]">Doctor&apos;s Review & Diagnosis</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -544,9 +591,12 @@ export default function DoctorReport() {
               value={form.treatment}
               onChange={(e) => setForm({ ...form, treatment: e.target.value })}
               rows={3}
-              placeholder="E.g. Prescription glasses, patching 2h/day of dominant eye for 6 weeks, review in 1 month."
+              placeholder="Clinician plan only. Example: glasses/refraction review, patching only if prescribed, follow-up timing."
               className={`${fieldCls} resize-none`}
             />
+            <p className="mt-1 text-xs text-amber-700">
+              Use patching only as prescribed by an eye-care professional. The app must not generate patching dose automatically.
+            </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>

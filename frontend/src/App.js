@@ -7,6 +7,7 @@ import DoctorLogin from "@/portals/auth/DoctorLogin";
 import PatientRegister from "@/portals/patient/PatientRegister";
 import PatientHome from "@/portals/patient/PatientHome";
 import ConsentScreen from "@/portals/patient/ConsentScreen";
+import HistoryQuestionnaire from "@/portals/patient/HistoryQuestionnaire";
 import QuickTest from "@/portals/patient/QuickTest";
 import TestRunner from "@/tests/TestRunner";
 import PatientResults from "@/portals/patient/PatientResults";
@@ -24,6 +25,7 @@ import ProtectedRoute from "@/core/auth/ProtectedRoute";
 import AccessDenied from "@/portals/staff/AccessDenied";
 import { useEffect } from "react";
 import { useAuthStore } from "@/core/auth/AuthStore";
+import { primeSpeech } from "@/core/audio/AudioGuide";
 import { useOfflineSync } from "@/core/offline/useOfflineSync";
 import { ThemeProvider } from "next-themes";
 
@@ -47,6 +49,13 @@ function App() {
   useOfflineSync();
   useEffect(() => {
     hydrate();
+    const prime = () => {
+      primeSpeech();
+      window.removeEventListener("pointerdown", prime);
+      window.removeEventListener("keydown", prime);
+    };
+    window.addEventListener("pointerdown", prime, { once: true });
+    window.addEventListener("keydown", prime, { once: true });
   }, [hydrate]);
 
   return (
@@ -65,6 +74,7 @@ function App() {
           <Route element={<ProtectedRoute allow={["patient"]} />}>
             <Route path="/patient" element={<PatientHome />} />
             <Route path="/patient/consent" element={<ConsentScreen />} />
+            <Route path="/patient/session/:sessionId/history" element={<HistoryQuestionnaire />} />
             <Route path="/patient/quick/:testId" element={<QuickTest />} />
             <Route path="/patient/session/:sessionId/test/:testIndex" element={<TestRunner />} />
             <Route path="/patient/session/:sessionId/test/heidelberg" element={<TestRunner />} />
@@ -97,6 +107,13 @@ function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <div
+          role="contentinfo"
+          aria-label="Clinical demo version notice"
+          className="fixed bottom-2 left-2 z-50 rounded-md border border-slate-200 bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/85 dark:text-slate-300"
+        >
+          Clinical demo version - screening/support only
+        </div>
       </BrowserRouter>
     </ThemeProvider>
   );

@@ -3,8 +3,15 @@ const STYLES = {
   mild: "bg-amber-50 text-amber-700 border-amber-200",
   moderate: "bg-orange-50 text-orange-700 border-orange-200",
   urgent: "bg-red-50 text-red-700 border-red-300",
+  incomplete: "bg-slate-100 text-slate-700 border-slate-300",
 };
-const LABEL = { normal: "Normal", mild: "Mild", moderate: "Moderate", urgent: "Urgent" };
+const LABEL = {
+  normal: "No major concern",
+  mild: "Review suggested",
+  moderate: "Doctor review",
+  urgent: "Urgent review",
+  incomplete: "Incomplete",
+};
 
 export default function RiskBadge({ level = "normal", className = "" }) {
   return (

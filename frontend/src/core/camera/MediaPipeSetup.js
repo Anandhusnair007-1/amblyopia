@@ -9,7 +9,7 @@ export function normalizeAgeYears(input, fallback = 8) {
   if (input == null || input === "") return fallback;
   const n = typeof input === "number" ? input : parseFloat(String(input).trim().replace(",", "."));
   if (!Number.isFinite(n)) return fallback;
-  return Math.min(18, Math.max(1, Math.round(n)));
+  return Math.min(99, Math.max(0, Math.round(n)));
 }
 
 export async function loadLandmarker() {
@@ -57,7 +57,9 @@ export function faceWidthCm(ageYears) {
   const y = normalizeAgeYears(ageYears, 8);
   if (y <= 4) return 11;
   if (y <= 7) return 12;
-  return 14;
+  if (y <= 17) return 14;
+  if (y <= 64) return 15;
+  return 15;
 }
 
 // Distance from face box width in pixels.

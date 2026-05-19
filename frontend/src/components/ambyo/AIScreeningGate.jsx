@@ -7,6 +7,12 @@ import UrgentBanner from "@/components/ambyo/UrgentBanner";
 import { useAuthStore } from "@/core/auth/AuthStore";
 import { getApiBasePath } from "@/core/apiBase";
 import { useI18n } from "@/core/i18n/translations";
+import { gateShowsUrgentBanner } from "@/lib/referralCopy";
+
+export { gateShowsUrgentBanner } from "@/lib/referralCopy";
+
+const GATE_AI_REVIEW_COPY =
+  "AI screening output suggests this should be reviewed by an eye-care professional.";
 
 const HINT_KEY = {
   improve_lighting: "ai_hint_improve_lighting",
@@ -34,7 +40,7 @@ function hintToKey(patientHint, qualityLabel) {
  * Camera quality gate — screen-quality decides pass/fail.
  * Supplementary strabismus scan runs after quality passes (never blocks the gate).
  */
-export function AIScreeningGate({ sessionId, testName, onPassed }) {
+export function AIScreeningGate({ sessionId, testName, onPassed, ruleBasedRiskLevel = null }) {
   const token = useAuthStore((s) => s.token);
   const base = getApiBasePath();
   const { t } = useI18n();
@@ -189,24 +195,25 @@ export function AIScreeningGate({ sessionId, testName, onPassed }) {
 
           {status === "passed" && (
             <div className="flex w-full flex-col items-center gap-4 py-4" data-testid="gate-passed">
-              {strabismusResult?.risk === "urgent" && (
-                <div className="w-full">
+              {gateShowsUrgentBanner(ruleBasedRiskLevel, strabismusResult?.risk) && (
+                <div className="w-full" data-testid="gate-rule-urgent-banner">
                   <UrgentBanner
                     findings={[
-                      strabismusResult.recommendation ||
-                        "Important findings detected. Please see an eye doctor as soon as possible.",
+                      "Your screening session indicates findings that need prompt review. "
+                      + "Please consult an eye-care professional.",
                     ]}
                   />
                 </div>
               )}
-              {strabismusResult?.risk === "moderate" && (
+              {strabismusResult?.risk &&
+                strabismusResult.risk !== "normal" &&
+                !gateShowsUrgentBanner(ruleBasedRiskLevel, strabismusResult?.risk) && (
                 <div
                   className="rounded-full border border-amber-400/35 bg-amber-500/10 px-4 py-2 text-center text-xs font-medium text-amber-100 shadow-sm"
-                  data-testid="gate-strabismus-moderate-pill"
+                  data-testid="gate-ai-review-pill"
                   role="status"
                 >
-                  {strabismusResult?.recommendation ||
-                    "Some findings require attention. Please visit an eye specialist soon."}
+                  {strabismusResult?.recommendation || GATE_AI_REVIEW_COPY}
                 </div>
               )}
               <div className="flex flex-col items-center gap-3 text-emerald-400">

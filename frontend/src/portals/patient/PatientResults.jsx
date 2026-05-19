@@ -13,46 +13,51 @@ import ScoreRing from "@/components/ambyo/ScoreRing";
 import UrgentBanner from "@/components/ambyo/UrgentBanner";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useI18n } from "@/core/i18n/translations";
+import { resolveUrgentReferralNext } from "@/lib/referralCopy";
 
 // Simple patient-facing copy (no medical jargon)
 const FRIENDLY = {
   normal: {
-    title: "All looks good!",
+    title: "No major screening concern on this pass",
     tone: "text-emerald-700",
     bg: "from-emerald-50 to-white",
-    message: "No concerning signs were detected in this screening. Keep an eye on your vision and screen again in 6–12 months.",
+    message: "This screening pass did not find a major concern. It does not rule out eye disease, so keep routine eye check-ups.",
     next: "Next: routine screening in 6-12 months.",
   },
   mild: {
-    title: "Mild note",
+    title: "Screening concern found",
     tone: "text-amber-700",
     bg: "from-amber-50 to-white",
     message: "We noticed a small thing worth checking. It's not an emergency, but a routine eye exam is a good idea.",
     next: "Next: book a routine eye check-up when convenient.",
   },
   moderate: {
-    title: "Please see a doctor",
+    title: "Result needs doctor review",
     tone: "text-orange-700",
     bg: "from-orange-50 to-white",
     message: "Your screening shows patterns we recommend a doctor review. Please schedule an appointment within the next 2 weeks.",
     next: "Next: visit an ophthalmologist within 2 weeks.",
   },
   urgent: {
-    title: "Please see a doctor soon",
+    title: "Urgent eye-care review recommended",
     tone: "text-red-700",
     bg: "from-red-50 to-white",
-    message: "The screening found signs that need prompt attention. Please visit an eye specialist as soon as possible. Show this report to the doctor.",
-    next: "Next: visit an ophthalmologist at Aravind Eye Hospital as soon as possible.",
+    message:
+      "The screening found signs that need prompt attention. Please consult an ophthalmologist or eye-care professional promptly. Show this report to your clinician.",
+    next: null,
+  },
+  incomplete: {
+    title: "Incomplete or unreliable screening",
+    tone: "text-slate-700",
+    bg: "from-slate-50 to-white",
+    message:
+      "Some tests were skipped, could not be scored, or may be unreliable. Please repeat screening or see an eye-care professional.",
+    next: "Next: repeat screening or book an in-person eye check.",
   },
 };
 
 const TEST_ORDER = ["visual_acuity", "gaze", "hirschberg", "prism", "titmus", "red_reflex", "heidelberg"];
-
-const STRABISMUS_CONDITION_COPY = {
-  XT: "Eye turns outward detected",
-  ET: "Eye turns inward detected",
-  HT: "Eye turns upward detected",
-};
 
 const STRABISMUS_CARD_BORDER = {
   urgent: "border-l-[6px] border-l-red-500",
@@ -69,6 +74,7 @@ function nextTestIndex(results = []) {
 export default function PatientResults() {
   const nav = useNavigate();
   const { sessionId } = useParams();
+  const { t } = useI18n();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -143,7 +149,14 @@ export default function PatientResults() {
   } = data;
   const strabismus_ai = strabismusFromPayload ?? session?.strabismus_ai ?? null;
   const risk = prediction.risk_level || "normal";
-  const copy = FRIENDLY[risk] || FRIENDLY.normal;
+  const baseCopy = FRIENDLY[risk] || FRIENDLY.normal;
+  const copy = {
+    ...baseCopy,
+    next:
+      risk === "urgent"
+        ? resolveUrgentReferralNext(patient, session)
+        : baseCopy.next,
+  };
   const isHighRisk = risk === "urgent" || risk === "moderate";
 
   const byTest = (name) => results.find((r) => r.test_name === name);
@@ -152,37 +165,65 @@ export default function PatientResults() {
     {
       key: "visual_acuity",
       name: "Visual acuity",
-      value: (r) => r?.details?.snellen_label || (r ? `6/${r.raw_score}` : "—"),
-      explain: () => "Checks how sharp the vision is by reading a direction or picture at a set distance.",
+      value: (r) => {
+        if (!r) return "—";
+        const d = r.details || {};
+        if (d.skipped || d.test_status === "skipped") return "Skipped";
+        if (d.measurement_valid === false || d.test_status === "incomplete") return "Not available";
+        const odL = d.od_label || d.od?.screening_line_label || d.od?.snellen_label;
+        const osL = d.os_label || d.os?.screening_line_label || d.os?.snellen_label;
+        if (odL && osL) return `OD ${odL} · OS ${osL}`;
+        if (odL || osL) return [odL && `OD ${odL}`, osL && `OS ${osL}`].filter(Boolean).join(" · ");
+        return d.snellen_label || `~6/${d.snellen_denominator || r.raw_score} screening`;
+      },
+      explain: () =>
+        "Uncalibrated near-screen acuity estimate at ~40 cm — not equivalent to clinic Snellen or a full eye exam.",
     },
     {
       key: "gaze",
-      name: "Gaze / alignment",
-      value: (r) => (r ? `${Number(r.details?.max_deviation_pd ?? r.raw_score).toFixed(1)}Δ` : "—"),
-      explain: () => "Measures how steady and aligned the eyes are while following a dot.",
+      name: "Gaze alignment (screening)",
+      value: (r) => {
+        if (!r) return "—";
+        const status = r.details?.screening_status;
+        if (status) return String(status).replace(/_/g, " ");
+        return "Recorded";
+      },
+      explain: () => "Uncalibrated gaze-stability screening while following a dot — not a prism measurement.",
     },
     {
       key: "hirschberg",
-      name: "Hirschberg",
-      value: (r) => (r ? `${Number(r.details?.estimatedPD ?? r.raw_score).toFixed(1)}Δ` : "—"),
-      explain: () => "Estimates eye deviation using the light reflex position on the iris.",
+      name: "Corneal reflex (screening)",
+      value: (r) => {
+        if (!r) return "—";
+        const d = r.details || {};
+        if (d.test_status === "incomplete" || d.measurement_valid === false) return "Not available";
+        if (d.screening_status) return String(d.screening_status).replace(/_/g, " ");
+        return "Recorded";
+      },
+      explain: () => "Screening proxy using corneal light reflex — confirm with an in-person exam.",
     },
     {
       key: "prism",
-      name: "Prism diopter",
-      value: (r) => (r ? `${Number(r.details?.estimatedPD ?? r.raw_score).toFixed(1)}Δ` : "—"),
-      explain: () => "A cover-test style estimate of how much the eyes shift when one eye is covered.",
+      name: "Alignment (screening proxy)",
+      value: (r) => {
+        if (!r) return "—";
+        const d = r.details || {};
+        if (d.test_status === "incomplete") return "Not available";
+        return "Alignment proxy recorded";
+      },
+      explain: () =>
+        "Alignment screening estimate only — occlusion is not verified on camera; not a clinical cover test.",
     },
     {
       key: "titmus",
-      name: "Depth perception",
+      name: "Depth perception (screening)",
       value: (r) => (r ? `${r.details?.passed ?? r.raw_score}/${r.details?.total ?? "?"}` : "—"),
-      explain: () => "Checks stereo (3D) depth perception with simple choices.",
+      explain: () => "On-screen depth screening proxy — not a validated clinical stereo test.",
     },
     {
       key: "red_reflex",
       name: "Red reflex",
-      value: (r) => (r ? String(r.details?.classification || "—").replace(/_/g, " ") : "—"),
+      value: (r) => (r ? String(r.details?.screening_status || "Recorded").replace(/_/g, " ") : "—"),
       explain: () => "Looks for abnormal pupil reflection patterns that may need a doctor’s review.",
     },
     {
@@ -205,7 +246,14 @@ export default function PatientResults() {
   };
 
   const download = () => {
-    const d = generateReport({ patient, session, results, prediction, strabismus_ai });
+    const d = generateReport({
+      patient,
+      session,
+      results,
+      prediction,
+      strabismus_ai,
+      patientFacing: true,
+    });
     api.post(`/sessions/${sessionId}/export-audit`, { export_type: "patient_pdf" }).catch(() => {});
     d.save(`AmbyoAI-${patient?.name?.replace(/\s+/g, "_") || "patient"}.pdf`);
     toast.success("Report downloaded");
@@ -213,7 +261,14 @@ export default function PatientResults() {
 
   const share = async () => {
     try {
-      const d = generateReport({ patient, session, results, prediction, strabismus_ai });
+      const d = generateReport({
+        patient,
+        session,
+        results,
+        prediction,
+        strabismus_ai,
+        patientFacing: true,
+      });
       const filename = `AmbyoAI-${patient?.name?.replace(/\s+/g, "_") || "patient"}.pdf`;
       const file = new File([d.output("blob")], filename, { type: "application/pdf" });
       api.post(`/sessions/${sessionId}/export-audit`, { export_type: "patient_share_pdf" }).catch(() => {});
@@ -255,20 +310,11 @@ export default function PatientResults() {
       </header>
 
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-        {strabismus_ai?.risk === "urgent" && (
-          <UrgentBanner
-            findings={[
-              strabismus_ai?.recommendation ||
-                "Important findings detected. Please see an eye doctor as soon as possible.",
-            ]}
-          />
-        )}
-
         <motion.section
           initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
           className={`relative grid items-center gap-8 overflow-hidden rounded-3xl border border-border bg-gradient-to-br ${copy.bg} p-6 shadow-sm sm:p-10 md:grid-cols-[auto_1fr]`}
         >
-          <ScoreRing score={prediction.health_score ?? 0} level={risk} size={180} stroke={14} />
+          <ScoreRing level={risk} size={180} stroke={14} qualitative />
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <p className="text-xs uppercase tracking-[0.3em] text-teal-700 font-bold">Result</p>
@@ -278,6 +324,25 @@ export default function PatientResults() {
               {copy.title}
             </h1>
             <p className="mt-3 text-slate-700 leading-relaxed max-w-xl">{copy.message}</p>
+            {(() => {
+              const va = byTest("visual_acuity");
+              const d = va?.details;
+              const linesDiff = d?.inter_eye_lines_diff ?? 0;
+              if (linesDiff >= 2 && d?.measurement_valid !== false) {
+                const od = d.od_label || d.od?.snellen_label || "OD";
+                const os = d.os_label || d.os?.snellen_label || "OS";
+                return (
+                  <p className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 max-w-xl">
+                    {t("va_inter_eye_note")}{" "}
+                    {t("va_od_os_summary", { od, os })}
+                    <span className="block mt-1 text-xs text-amber-900/80">
+                      Screening estimate only — confirm with an eye-care professional.
+                    </span>
+                  </p>
+                );
+              }
+              return null;
+            })()}
             <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-semibold text-[#0A2540]">
               <CalendarCheck size={14} /> {copy.next}
             </div>
@@ -291,7 +356,7 @@ export default function PatientResults() {
               initial={{ y: 6, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               data-testid="patient-strabismus-ai-card"
-              className={`rounded-2xl border border-border bg-white shadow-sm ${STRABISMUS_CARD_BORDER[strabismus_ai.risk] || STRABISMUS_CARD_BORDER.mild}`}
+              className={`rounded-2xl border border-border bg-white shadow-sm ${STRABISMUS_CARD_BORDER.mild}`}
             >
               <div className="p-6 sm:p-7">
                 <div className="flex items-center gap-3">
@@ -300,45 +365,18 @@ export default function PatientResults() {
                   </div>
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                      AI Screening Result
+                      AI screening review
                     </p>
-                    <h2 className="text-xl font-bold tracking-tight text-[#0A2540]">AI Eye Analysis</h2>
+                    <h2 className="text-xl font-bold tracking-tight text-[#0A2540]">Camera screening follow-up</h2>
                   </div>
                 </div>
 
-                {strabismus_ai.condition &&
-                  STRABISMUS_CONDITION_COPY[strabismus_ai.condition] && (
-                    <div className="mt-5 rounded-xl border border-border bg-slate-50/80 px-4 py-3">
-                      <p className="text-lg font-semibold leading-snug text-[#0A2540]">
-                        {STRABISMUS_CONDITION_COPY[strabismus_ai.condition]}
-                      </p>
-                    </div>
-                  )}
+                <p className="mt-5 text-sm leading-relaxed text-slate-700">
+                  {strabismus_ai.recommendation ||
+                    "AI screening output suggests this should be reviewed by an eye-care professional."}
+                </p>
 
-                {typeof strabismus_ai.confidence === "number" && Number.isFinite(strabismus_ai.confidence) && (
-                  <div className="mt-5">
-                    <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-                      <span>Confidence</span>
-                      <span className="font-mono text-teal-800">
-                        {(Math.min(1, Math.max(0, strabismus_ai.confidence)) * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        className="h-full rounded-full bg-teal-600 transition-[width]"
-                        style={{
-                          width: `${Math.min(100, Math.max(0, strabismus_ai.confidence * 100))}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {strabismus_ai.recommendation && (
-                  <p className="mt-5 text-sm leading-relaxed text-slate-700">{strabismus_ai.recommendation}</p>
-                )}
-
-                <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+<p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
                   AI-assisted screening. Not a medical diagnosis.
                 </p>
               </div>
@@ -379,21 +417,6 @@ export default function PatientResults() {
                     </div>
                   </div>
                   <p className="mt-3 text-sm text-slate-600 leading-relaxed">{t.explain(r)}</p>
-                  {/* AI confidence (subtle) */}
-                  {r && !skipped && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                        <span>AI confidence (approx.)</span>
-                        <span className="font-mono">{confPct}%</span>
-                      </div>
-                      <div className="mt-1.5 h-2 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-teal-600 transition-all"
-                          style={{ width: `${confPct}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}

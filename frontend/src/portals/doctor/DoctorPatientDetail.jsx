@@ -68,7 +68,7 @@ export default function DoctorPatientDetail() {
                 <Phone size={14} className="shrink-0 opacity-70" /> {maskPhone(patient.phone)}
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
-                <Hospital size={14} className="shrink-0 opacity-70" /> {patient.hospital_name || "Aravind Eye Hospital"}
+                <Hospital size={14} className="shrink-0 opacity-70" /> {patient.hospital_name || "Eye-care facility not specified"}
               </div>
               {patient.guardian_name && (
                 <div className="text-sm text-muted-foreground sm:col-span-2">

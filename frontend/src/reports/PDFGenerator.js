@@ -1,4 +1,21 @@
 import jsPDF from "jspdf";
+import {
+  PDF_GENERIC_HOSPITAL_LABEL,
+  patientPdfDetailEntries,
+  patientStrabismusPdfLines,
+  pdfReportTitle,
+  resolveReportHospital,
+} from "@/lib/referralCopy";
+
+export {
+  PDF_GENERIC_HOSPITAL_LABEL,
+  PATIENT_PDF_REPORT_TITLE,
+  patientPdfDetailEntries,
+  patientStrabismusPdfLines,
+  pdfReportTitle,
+  reportTextContainsAravind,
+  resolveReportHospital,
+} from "@/lib/referralCopy";
 
 // Minimal 6-page PDF report (no external fonts; uses jsPDF defaults)
 export function generateReport({
@@ -6,9 +23,14 @@ export function generateReport({
   session,
   results,
   prediction,
-  hospital = "Aravind Eye Hospital, Coimbatore",
+  hospital,
   strabismus_ai = null,
+  patientFacing = false,
 }) {
+  const hospitalLabel =
+    hospital != null && String(hospital).trim()
+      ? String(hospital).trim()
+      : resolveReportHospital(patient, session);
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const M = 48;
@@ -21,7 +43,7 @@ export function generateReport({
     doc.setFont("helvetica", "bold"); doc.setFontSize(22);
     doc.text("AmbyoAI", M, 38);
     doc.setFontSize(10); doc.setFont("helvetica", "normal");
-    doc.text(hospital, M, 58);
+    doc.text(hospitalLabel, M, 58);
     if (title) {
       doc.setFontSize(9); doc.setTextColor(200, 220, 240);
       doc.text(title.toUpperCase(), W - M, 38, { align: "right" });
@@ -53,7 +75,7 @@ export function generateReport({
   };
 
   // Page 1 — Cover
-  header("Pediatric Amblyopia Screening Report", `Session ${session?.id?.slice(0, 8) || ""}`);
+  header(pdfReportTitle(patientFacing), `Session ${session?.id?.slice(0, 8) || ""}`);
   h2("Patient");
   kv("Name", patient?.name);
   kv("Age", patient?.age);
@@ -66,41 +88,57 @@ export function generateReport({
   kv("Created", session?.created_at);
   kv("Completed", session?.completed_at || "—");
   kv("Status", session?.status);
-  kv("Hospital", hospital);
+  kv("Hospital", hospitalLabel);
 
   // Page 2 — Summary
-  doc.addPage(); header("Summary & AI Risk");
-  h2("Overall Health");
+  doc.addPage(); header(patientFacing ? "Screening Summary" : "Summary & AI Risk");
   const risk = prediction?.risk_level || "normal";
-  const score = prediction?.health_score ?? 0;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(44);
-  const color = risk === "urgent" ? [239, 68, 68] : risk === "moderate" ? [249, 115, 22] : risk === "mild" ? [245, 158, 11] : [16, 185, 129];
-  doc.setTextColor(...color);
-  doc.text(`${score}`, M, y + 40);
-  doc.setFontSize(12); doc.setTextColor(71, 85, 105);
-  doc.text("/ 100 Health Score", M + 110, y + 40);
-  y += 80;
-  kv("Risk Level", risk.toUpperCase());
-  kv("Risk Score", (prediction?.risk_score ?? 0).toFixed(3));
-  kv("Model", prediction?.model_version || "clinical-fallback-v1");
-  y += 10;
-  h2("Clinical Findings");
+  const riskLabel =
+    risk === "urgent"
+      ? "Prompt follow-up recommended"
+      : risk === "moderate"
+        ? "Eye-care visit recommended"
+        : risk === "mild"
+          ? "Routine follow-up suggested"
+          : risk === "incomplete"
+            ? "Screening incomplete"
+            : "No major screening concern on this pass";
+  if (patientFacing) {
+    h2("Screening result");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(10, 37, 64);
+    doc.text(riskLabel, M, y);
+    y += 28;
+    para(
+      "This app provides screening and support only. It does not diagnose lazy eye, prescribe glasses, determine patching treatment, or replace an eye doctor. If screening is abnormal, incomplete, or if a child has eye turning, white pupil, poor vision, eye pain, trauma, or parent concern, consult a pediatric ophthalmologist or qualified eye-care professional."
+    );
+    y += 6;
+  } else {
+    h2("Overall Health");
+    const score = prediction?.health_score ?? 0;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(44);
+    const color = risk === "urgent" ? [239, 68, 68] : risk === "moderate" ? [249, 115, 22] : risk === "mild" ? [245, 158, 11] : [16, 185, 129];
+    doc.setTextColor(...color);
+    doc.text(`${score}`, M, y + 40);
+    doc.setFontSize(12); doc.setTextColor(71, 85, 105);
+    doc.text("/ 100 Health Score", M + 110, y + 40);
+    y += 80;
+    kv("Risk Level", risk.toUpperCase());
+    kv("Risk Score", (prediction?.risk_score ?? 0).toFixed(3));
+    kv("Model", prediction?.model_version || "clinical-fallback-v1");
+    y += 10;
+  }
+  h2(patientFacing ? "Screening Findings" : "Clinical Findings");
   (prediction?.findings || []).forEach((f) => para("• " + f));
 
-  if (strabismus_ai && strabismus_ai.risk && strabismus_ai.risk !== "normal") {
+  const aiLines = patientStrabismusPdfLines(strabismus_ai, { patientFacing });
+  if (aiLines.length > 0) {
     y += 14;
-    h2("AI Eye Analysis");
-    if (strabismus_ai.condition) {
-      kv("Condition code", String(strabismus_ai.condition));
-    }
-    kv("AI risk", String(strabismus_ai.risk).toUpperCase());
-    if (typeof strabismus_ai.confidence === "number") {
+    h2(patientFacing ? "AI Screening Review" : "AI Eye Analysis");
+    aiLines.forEach((line) => para(line));
+    if (!patientFacing && typeof strabismus_ai?.confidence === "number") {
       kv("Confidence", `${(strabismus_ai.confidence * 100).toFixed(0)}%`);
     }
-    if (strabismus_ai.recommendation) {
-      para(strabismus_ai.recommendation);
-    }
-    if (strabismus_ai.all_scores && typeof strabismus_ai.all_scores === "object") {
+    if (!patientFacing && strabismus_ai?.all_scores && typeof strabismus_ai.all_scores === "object") {
       kv(
         "Class scores",
         Object.entries(strabismus_ai.all_scores)
@@ -108,31 +146,48 @@ export function generateReport({
           .join(", ")
       );
     }
-    para("AI-assisted screening. Not a medical diagnosis.");
   }
 
   // Page 3-5 — Per-test details
   const byName = Object.fromEntries((results || []).map((r) => [r.test_name, r]));
-  const TESTS = [
-    ["visual_acuity", "Visual Acuity"],
-    ["gaze", "Gaze Detection"],
-    ["hirschberg", "Hirschberg Test"],
-    ["prism", "Prism Diopter"],
-    ["titmus", "Titmus Stereo"],
-    ["red_reflex", "Red Reflex"],
-  ];
+  const TESTS = patientFacing
+    ? [
+        ["visual_acuity", "Visual acuity (screening)"],
+        ["gaze", "Gaze stability screening"],
+        ["hirschberg", "Hirschberg alignment estimate"],
+        ["prism", "Alignment screening proxy"],
+        ["titmus", "Depth screening"],
+        ["red_reflex", "Red reflex"],
+      ]
+    : [
+        ["visual_acuity", "Visual Acuity"],
+        ["gaze", "Gaze stability screening"],
+        ["hirschberg", "Hirschberg alignment estimate"],
+        ["prism", "Alignment screening proxy"],
+        ["titmus", "Depth screening"],
+        ["red_reflex", "Red Reflex"],
+      ];
   TESTS.forEach(([key, label], i) => {
     if (i % 2 === 0) { doc.addPage(); header(`Test Detail ${i + 1}`); }
     h2(label);
     const r = byName[key];
     if (!r) { para("Not performed."); return; }
-    kv("Raw Score", r.raw_score);
-    kv("Normalized", r.normalized_score);
     const details = r.details || {};
-    Object.entries(details).slice(0, 8).forEach(([k, v]) => {
-      const txt = typeof v === "object" ? JSON.stringify(v).slice(0, 100) : String(v);
-      kv(k, txt);
-    });
+    if (patientFacing) {
+      const rows = patientPdfDetailEntries(details);
+      if (rows.length === 0) {
+        para("Screening recorded — confirm details with an eye-care professional.");
+      } else {
+        rows.forEach(([k, txt]) => kv(k, txt));
+      }
+    } else {
+      kv("Raw Score", r.raw_score);
+      kv("Normalized", r.normalized_score);
+      Object.entries(details).slice(0, 8).forEach(([k, v]) => {
+        const txt = typeof v === "object" ? JSON.stringify(v).slice(0, 100) : String(v);
+        kv(k, txt);
+      });
+    }
     y += 10;
   });
 
@@ -152,7 +207,11 @@ export function generateReport({
   return doc;
 }
 
-export function generateReferralLetter({ patient, prediction, branch = "Aravind Eye Hospital, Coimbatore" }) {
+export function generateReferralLetter({ patient, prediction, branch }) {
+  const branchLabel =
+    branch != null && String(branch).trim()
+      ? String(branch).trim()
+      : PDF_GENERIC_HOSPITAL_LABEL;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const M = 48;
@@ -165,7 +224,7 @@ export function generateReferralLetter({ patient, prediction, branch = "Aravind 
   let y = 130;
   doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "normal"); doc.setFontSize(11);
   doc.text(`To: The Chief Ophthalmologist`, M, y); y += 16;
-  doc.text(branch, M, y); y += 30;
+  doc.text(branchLabel, M, y); y += 30;
 
   doc.setFont("helvetica", "bold"); doc.text("Re: Pediatric Amblyopia Screening — URGENT", M, y); y += 24;
   doc.setFont("helvetica", "normal");

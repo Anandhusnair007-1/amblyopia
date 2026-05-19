@@ -184,6 +184,8 @@ export default function HirschbergTest({ patient, onComplete, flowIndex, flowTot
             risk: "unknown",
             samples: 0,
             note: "no samples",
+            test_status: "incomplete",
+            measurement_valid: false,
           },
         });
       }
@@ -199,8 +201,11 @@ export default function HirschbergTest({ patient, onComplete, flowIndex, flowTot
       const rightMm = median(samples.map((s) => s.right.displacementMm));
       const asymmetry = Math.abs(leftMm - rightMm);
 
-      // Hirschberg ratio: 1mm displacement ≈ 22 prism diopters
-      const estimatedPD = ((leftMm + rightMm) / 2) * 22;
+      const PD_PER_MM = 22;
+      const displacementMm = Math.max(leftMm, rightMm);
+      const estimatedPD = displacementMm * PD_PER_MM;
+      const samplesCount = samples.length;
+      const confidence = samplesCount >= 8 ? "adequate" : "low";
       const risk = classifyRisk(estimatedPD);
 
       const normalized = Math.max(0, Math.min(1, Math.abs(estimatedPD) / 30)); // 0..30 PD scaled
@@ -212,11 +217,17 @@ export default function HirschbergTest({ patient, onComplete, flowIndex, flowTot
         details: {
           leftDisplacementMM: +leftMm.toFixed(3),
           rightDisplacementMM: +rightMm.toFixed(3),
-          estimatedPD: +estimatedPD.toFixed(2),
+          displacement_mm: +displacementMm.toFixed(3),
+          estimatedPD: confidence === "adequate" ? +estimatedPD.toFixed(2) : null,
+          alignment_proxy_index: +estimatedPD.toFixed(2),
           asymmetry: +asymmetry.toFixed(3),
           risk,
-          samples: samples.length,
-          // Keep some debug context for clinicians (bounded size).
+          samples: samplesCount,
+          samples_count: samplesCount,
+          conversion_method: "max_displacement_mm_times_pd_per_mm",
+          pd_per_mm: PD_PER_MM,
+          confidence,
+          measurement_validity: "proxy",
           sample_preview: samples.slice(-3),
         },
       }), 800);

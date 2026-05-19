@@ -12,10 +12,11 @@ const MedicalDisclaimer = ({ className = "" }) => {
         <AlertCircle size={20} />
       </div>
       <div className="text-sm leading-relaxed font-medium">
-        AmbyoAI is an AI-assisted screening and referral support tool. 
-        It does <strong>not</strong> provide a final medical diagnosis. 
-        Final interpretation and treatment decisions must be confirmed by a 
-        qualified ophthalmologist or optometrist.
+        This app provides screening and support only. It does <strong>not</strong> diagnose lazy eye,
+        prescribe glasses, determine patching treatment, or replace an eye doctor. If screening is
+        abnormal, incomplete, or if a child has eye turning, white pupil, poor vision, eye pain,
+        trauma, or parent concern, consult a pediatric ophthalmologist or qualified eye-care
+        professional.
       </div>
     </div>
   );

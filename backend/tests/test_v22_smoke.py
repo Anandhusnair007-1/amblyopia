@@ -11,6 +11,11 @@ import pytest
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://eye-screening-ai.preview.emergentagent.com").rstrip("/")
 
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_BACKEND_E2E") != "1",
+    reason="live backend smoke tests require RUN_BACKEND_E2E=1 and REACT_APP_BACKEND_URL",
+)
+
 
 @pytest.fixture(scope="module")
 def session():

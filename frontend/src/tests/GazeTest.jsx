@@ -68,7 +68,13 @@ export default function GazeTest({ patient, onComplete, flowIndex, flowTotal, fl
     setTimeout(() => onComplete({
       raw_score: +maxDev.toFixed(2),
       normalized_score: Math.max(0, Math.min(1, maxDev / 40)),
-      details: { per_direction: perDir, max_deviation_pd: +maxDev.toFixed(2), calibration: cal },
+      details: {
+        measurement_type: "gaze_alignment_proxy",
+        max_gaze_stability_index: +maxDev.toFixed(2),
+        max_deviation_pd: +maxDev.toFixed(2),
+        calibration: cal,
+        measurement_validity: "proxy",
+      },
     }), 800);
   };
 
@@ -85,7 +91,7 @@ export default function GazeTest({ patient, onComplete, flowIndex, flowTotal, fl
       {() => (
         <div className="relative min-h-0 flex-1">
           <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 text-center sm:top-20">
-            <p className="text-xs font-semibold tracking-wide text-sky-400">Gaze · {step + 1} / 9</p>
+            <p className="text-xs font-semibold tracking-wide text-sky-400">Gaze alignment · {step + 1} / 9</p>
             <p className="mt-1 text-slate-300 text-sm">Follow the dot with your eyes only</p>
           </div>
           <AnimatePresence mode="wait">

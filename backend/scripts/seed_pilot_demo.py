@@ -116,7 +116,7 @@ def result_docs(session_id: str, profile: str = "normal"):
 def prediction_doc(session_id: str, risk: str):
     score = {"normal": 0.1, "mild": 0.4, "moderate": 0.7, "urgent": 0.95}[risk]
     findings = {
-        "normal": ["All screening indicators within normal range."],
+        "normal": ["No major screening concern on this pass."],
         "moderate": ["Reduced acuity and ocular alignment findings need doctor review."],
         "urgent": ["Large gaze deviation detected.", "Red reflex asymmetry requires prompt ophthalmology review."],
     }.get(risk, ["Screening needs clinical review."])
@@ -125,7 +125,7 @@ def prediction_doc(session_id: str, risk: str):
             "test": "Gaze Deviation",
             "metric": "max_deviation_px",
             "value": "32 px" if risk == "urgent" else "10 px",
-            "threshold": "Normal: <= 4 px",
+            "threshold": "Screening reference: <= 4 px",
             "interpretation": "Possible ocular misalignment. Confirm clinically.",
             "severity": risk,
         }
@@ -300,9 +300,9 @@ def main() -> None:
         "session_id": "demo-session-normal",
         "doctor_id": DOCTOR_ID,
         "doctor_name": "Dr. Meera Sundaram",
-        "diagnosis": "No amblyopia signs detected on screening.",
+        "diagnosis": "No major screening concern on this pass.",
         "treatment": "Routine rescreening in 6-12 months.",
-        "risk_label": "Normal screening",
+        "risk_label": "No major screening concern",
         "follow_up_date": (datetime.now(timezone.utc) + timedelta(days=180)).date().isoformat(),
         "referred_to": "",
         "confirmed_by_doctor": True,

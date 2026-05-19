@@ -10,7 +10,7 @@ const MedicalDisclaimer = ({ variant = 'standard' }) => {
     return (
       <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100 text-[10px] text-amber-800 leading-tight">
         <AlertTriangle size={12} className="flex-shrink-0" />
-        <p>Screening support only. Not an autonomous diagnosis. Final confirmation by MD/Optom required.</p>
+        <p>Screening/support only. Does not diagnose lazy eye, prescribe glasses, or determine patching treatment.</p>
       </div>
     );
   }
@@ -25,12 +25,12 @@ const MedicalDisclaimer = ({ variant = 'standard' }) => {
       </div>
       <div className="space-y-2 text-xs md:text-sm leading-relaxed opacity-90">
         <p>
-          <strong>AmbyoAI</strong> is an AI-assisted screening and referral decision-support system. 
-          It is <strong>NOT</strong> an autonomous diagnostic device.
+          This app provides screening and support only. It does <strong>not</strong> diagnose lazy eye,
+          prescribe glasses, determine patching treatment, or replace an eye doctor.
         </p>
         <ul className="list-disc pl-5 space-y-1">
-          <li>All results must be clinically verified by a qualified ophthalmologist or optometrist.</li>
-          <li>Final diagnosis, treatment plan, and surgical decisions are the sole responsibility of the attending clinician.</li>
+          <li>If screening is abnormal or incomplete, consult a pediatric ophthalmologist or qualified eye-care professional.</li>
+          <li>Final diagnosis, glasses prescription, patching plan, and treatment decisions must be made by the clinician.</li>
           <li>AI predictions depend on image quality and patient cooperation.</li>
         </ul>
         <p className="pt-2 italic text-[10px] border-t border-amber-200/50">
