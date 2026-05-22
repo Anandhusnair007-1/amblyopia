@@ -19,28 +19,28 @@ import { resolveUrgentReferralNext } from "@/lib/referralCopy";
 // Simple patient-facing copy (no medical jargon)
 const FRIENDLY = {
   normal: {
-    title: "No major screening concern on this pass",
+    title: "All looks good!",
     tone: "text-emerald-700",
     bg: "from-emerald-50 to-white",
-    message: "This screening pass did not find a major concern. It does not rule out eye disease, so keep routine eye check-ups.",
+    message: "No concerning signs were detected in this screening. Keep an eye on your vision and screen again in 6–12 months.",
     next: "Next: routine screening in 6-12 months.",
   },
   mild: {
-    title: "Screening concern found",
+    title: "Mild note",
     tone: "text-amber-700",
     bg: "from-amber-50 to-white",
     message: "We noticed a small thing worth checking. It's not an emergency, but a routine eye exam is a good idea.",
     next: "Next: book a routine eye check-up when convenient.",
   },
   moderate: {
-    title: "Result needs doctor review",
+    title: "Please see a doctor",
     tone: "text-orange-700",
     bg: "from-orange-50 to-white",
     message: "Your screening shows patterns we recommend a doctor review. Please schedule an appointment within the next 2 weeks.",
     next: "Next: visit an ophthalmologist within 2 weeks.",
   },
   urgent: {
-    title: "Urgent eye-care review recommended",
+    title: "Please see a doctor soon",
     tone: "text-red-700",
     bg: "from-red-50 to-white",
     message:
@@ -48,11 +48,11 @@ const FRIENDLY = {
     next: null,
   },
   incomplete: {
-    title: "Incomplete or unreliable screening",
+    title: "Screening incomplete",
     tone: "text-slate-700",
     bg: "from-slate-50 to-white",
     message:
-      "Some tests were skipped, could not be scored, or may be unreliable. Please repeat screening or see an eye-care professional.",
+      "Some tests were skipped, could not be scored, or need to be repeated. This is not a normal result — please complete screening or see an eye-care professional.",
     next: "Next: repeat screening or book an in-person eye check.",
   },
 };
@@ -217,13 +217,20 @@ export default function PatientResults() {
     {
       key: "titmus",
       name: "Depth perception (screening)",
-      value: (r) => (r ? `${r.details?.passed ?? r.raw_score}/${r.details?.total ?? "?"}` : "—"),
+      value: (r) => {
+        if (!r) return "—";
+        const d = r.details || {};
+        if (d.stereo_grade_label) return String(d.stereo_grade_label);
+        if (d.stereo_grade) return String(d.stereo_grade).replace(/_/g, " ");
+        if (d.passed != null && d.total != null) return `${d.passed}/${d.total}`;
+        return "Recorded";
+      },
       explain: () => "On-screen depth screening proxy — not a validated clinical stereo test.",
     },
     {
       key: "red_reflex",
       name: "Red reflex",
-      value: (r) => (r ? String(r.details?.screening_status || "Recorded").replace(/_/g, " ") : "—"),
+      value: (r) => (r ? String(r.details?.classification || "—").replace(/_/g, " ") : "—"),
       explain: () => "Looks for abnormal pupil reflection patterns that may need a doctor’s review.",
     },
     {
@@ -417,6 +424,21 @@ export default function PatientResults() {
                     </div>
                   </div>
                   <p className="mt-3 text-sm text-slate-600 leading-relaxed">{t.explain(r)}</p>
+                  {/* AI confidence (subtle) */}
+                  {r && !skipped && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>AI confidence (approx.)</span>
+                        <span className="font-mono">{confPct}%</span>
+                      </div>
+                      <div className="mt-1.5 h-2 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-teal-600 transition-all"
+                          style={{ width: `${confPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

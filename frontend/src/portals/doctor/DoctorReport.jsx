@@ -175,6 +175,24 @@ function ResultCard({ name, result }) {
         <div><span className="text-muted-foreground">Raw:</span> <span className="font-mono font-medium">{Number(result.raw_score).toFixed(2)}</span></div>
         <div><span className="text-muted-foreground">Norm:</span> <span className="font-mono font-medium">{Number(result.normalized_score).toFixed(3)}</span></div>
       </div>
+      {name === "hirschberg" && details.hirschberg_zone_label && (
+        <p className="mt-2 text-sm text-foreground">
+          Zone: <span className="font-semibold">{details.hirschberg_zone_label}</span>
+          {details.predicted_pd != null ? ` (~${details.predicted_pd}Δ proxy)` : ""}
+        </p>
+      )}
+      {name === "titmus" && (details.stereo_grade_label || details.stereo_grade) && (
+        <p className="mt-2 text-sm text-foreground">
+          Stereo: <span className="font-semibold">{details.stereo_grade_label || String(details.stereo_grade).replace(/_/g, " ")}</span>
+          {details.arc_seconds != null ? ` (~${details.arc_seconds} arc-sec est.)` : ""}
+        </p>
+      )}
+      {name === "red_reflex" && details.classification && (
+        <p className="mt-2 text-sm text-foreground">
+          Reflex: <span className="font-semibold">{String(details.classification).replace(/_/g, " ")}</span>
+          {details.asymmetric ? " · asymmetric between eyes" : ""}
+        </p>
+      )}
       <button type="button" onClick={() => setOpen(!open)} className="mt-3 inline-flex items-center gap-1 text-xs text-teal-700 hover:text-teal-800 font-medium">
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {open ? "Hide" : "Show"} raw details
       </button>
@@ -203,6 +221,7 @@ export default function DoctorReport() {
   const [wrongPatientOpen, setWrongPatientOpen] = useState(false);
   const [patientVerified, setPatientVerified] = useState(false);
   const [exportConfirm, setExportConfirm] = useState(null);
+  const [methodologyOpen, setMethodologyOpen] = useState(false);
 
   const load = async () => {
     const r = await api.get(`/sessions/${sessionId}`);
@@ -342,6 +361,37 @@ export default function DoctorReport() {
       <div className="px-1">
         <AuditActionNotice />
       </div>
+
+      <DashboardCard className="overflow-hidden p-0" data-testid="clinical-methodology-card">
+        <button
+          type="button"
+          onClick={() => setMethodologyOpen((o) => !o)}
+          className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left hover:bg-muted/40"
+        >
+          <span className="flex items-center gap-2 text-sm font-bold text-[#0A2540]">
+            <Info size={16} className="text-teal-700" />
+            How screening tests work (methodology)
+          </span>
+          {methodologyOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
+        {methodologyOpen && (
+          <div className="border-t border-border px-5 py-4 text-sm text-muted-foreground space-y-3">
+            <p>
+              <strong className="text-foreground">Hirschberg:</strong> corneal reflex vs iris center → zones 0 / 15 / 30 / 45Δ proxy.
+            </p>
+            <p>
+              <strong className="text-foreground">Depth screening:</strong> graded on-screen disparity → estimated arc-seconds (40–60 normal, 61–200 mild, …).
+            </p>
+            <p>
+              <strong className="text-foreground">Red reflex:</strong> per-eye red pupil color after screen flash (not fundus camera).
+            </p>
+            <p className="text-xs">
+              Full technical document: <code className="rounded bg-muted px-1">docs/CLINICAL_TEST_METHODOLOGY.md</code> in the repository.
+              Data stored in <strong>MongoDB</strong>; phone camera proxies require clinical confirmation when abnormal.
+            </p>
+          </div>
+        )}
+      </DashboardCard>
 
       <MedicalDisclaimer />
       <PatientContextBar patient={patient} session={session} prediction={prediction} consentSummary="On file" />

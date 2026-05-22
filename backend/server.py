@@ -93,9 +93,9 @@ except ImportError:
     )
 
 try:
-    from backend.clinical_classifier import apply_ai_screening_flag, classify_risk, required_tests_for_age, CLINICAL_RULE_VERSION
+    from backend.clinical_classifier import apply_ai_screening_flag, classify_risk, CLINICAL_RULE_VERSION
 except ImportError:
-    from clinical_classifier import apply_ai_screening_flag, classify_risk, required_tests_for_age, CLINICAL_RULE_VERSION
+    from clinical_classifier import apply_ai_screening_flag, classify_risk, CLINICAL_RULE_VERSION
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -106,13 +106,7 @@ db = client[os.environ['DB_NAME']]
 
 # Constants
 APP_VERSION = "2.0.0"
-RELEASE_NAME = "amblyopia-screening-v0.1-clinical-demo"
-TEST_ALGORITHM_VERSION = "ambyo-core-2.2"
-CALIBRATION_VERSION = "screen-calibration-v1"
 DATASET_VERSION = os.environ.get("DATASET_VERSION", "unknown")
-QUALITY_MODEL_VERSION = os.environ.get("AMBYO_QUALITY_MODEL_VERSION", "eye_quality_v1")
-DEVIATION_MODEL_VERSION = os.environ.get("AMBYO_DEVIATION_MODEL_VERSION", "deviation_classifier_v0_2_balanced")
-STRABISMUS_MODEL_VERSION = "strabismus_v1.0.0"
 
 ENV = os.environ.get("ENV", "development")
 JWT_SECRET = os.environ.get('JWT_SECRET')
@@ -441,9 +435,6 @@ class TestResultIn(BaseModel):
     raw_score: float
     normalized_score: float
     details: Dict[str, Any] = Field(default_factory=dict)
-    result_state: Optional[str] = None
-    device_info: Dict[str, Any] = Field(default_factory=dict)
-    calibration_info: Dict[str, Any] = Field(default_factory=dict)
 
 class DiagnosisIn(BaseModel):
     session_id: str
@@ -463,75 +454,14 @@ class DiagnosisIn(BaseModel):
 class ExportAuditIn(BaseModel):
     export_type: str = "pdf"
 
-
-class PatchingPlanIn(BaseModel):
-    patient_id: str
-    session_id: Optional[str] = None
-    prescribed_eye: str = ""
-    schedule_note: str = ""
-    start_date: str = ""
-    end_date: str = ""
-    clinician_note: Optional[str] = ""
-
-
-class PatchingLogIn(BaseModel):
-    plan_id: str
-    status: str = "completed"  # completed | missed | partial
-    minutes_completed: int = 0
-    parent_notes: Optional[str] = ""
-
-
-RESULT_STATES = {"completed", "incomplete", "unreliable", "needs_review", "urgent_review"}
-
-
-def _derive_result_state(test_name: str, details: Dict[str, Any]) -> str:
-    explicit = str(details.get("result_state") or details.get("test_status") or "").lower()
-    if explicit in RESULT_STATES:
-        return explicit
-    if details.get("skipped") or details.get("measurement_valid") is False:
-        return "incomplete"
-    qg = details.get("quality_gate") if isinstance(details.get("quality_gate"), dict) else {}
-    if qg and qg.get("is_usable") is False:
-        return "unreliable"
-    if test_name == "red_reflex":
-        cls = str(details.get("classification") or "").lower()
-        if cls in {"leukocoria", "white", "absent", "media_opacity"}:
-            return "urgent_review"
-        if cls in {"dim", "indeterminate"}:
-            return "needs_review"
-    return "completed"
-
-
-def _is_test_allowed_for_patient(test_name: str, age: Optional[int]) -> bool:
-    return test_name in required_tests_for_age(age)
-
 # ── Routes: Auth
 @api_router.get("/")
 async def root():
-    return {"service": "AmbyoAI", "version": APP_VERSION, "status": "ok", "time": now_iso()}
+    return {"service": "AmbyoAI", "version": "2.0.0", "status": "ok", "time": now_iso()}
 
 @api_router.get("/health")
 async def health():
     return {"status": "ok"}
-
-@api_router.get("/version")
-async def version():
-    return {
-        "product": "AmbyoAI",
-        "release_name": RELEASE_NAME,
-        "app_version": APP_VERSION,
-        "backend_version": APP_VERSION,
-        "clinical_rule_version": CLINICAL_RULE_VERSION,
-        "test_algorithm_version": TEST_ALGORITHM_VERSION,
-        "calibration_version": CALIBRATION_VERSION,
-        "model_versions": {
-            "quality_model_version": QUALITY_MODEL_VERSION,
-            "deviation_model_version": DEVIATION_MODEL_VERSION,
-            "strabismus_model_version": STRABISMUS_MODEL_VERSION,
-            "dataset_version": DATASET_VERSION,
-        },
-        "safety_positioning": "screening/support only; not diagnostic",
-    }
 
 @api_router.post("/auth/patient/request-otp")
 async def patient_request_otp(request: Request, body: OtpRequestIn):
@@ -782,54 +712,22 @@ async def add_result(sid: str, body: TestResultIn, u = Depends(current_user)):
         raise HTTPException(404, "Session not found")
     if u.get("role") == "patient" and s["patient_id"] != u["sub"]:
         raise HTTPException(403, "Forbidden")
-    p_doc = await db.patients.find_one({"id": s["patient_id"]}, {"age": 1, "hospital_id": 1, "_id": 0})
-    patient_age = p_doc.get("age") if p_doc else None
-    if not _is_test_allowed_for_patient(body.test_name, patient_age):
-        raise HTTPException(400, f"Test '{body.test_name}' is not suitable for patient age {patient_age}")
     if u.get("role") not in ("patient", "patient_pending") and can_operate_session(u):
         if not is_super_admin(u) and u.get("hospital_id"):
-            pp = p_doc or await db.patients.find_one({"id": s["patient_id"]}, {"hospital_id": 1, "_id": 0})
+            pp = await db.patients.find_one({"id": s["patient_id"]}, {"hospital_id": 1, "_id": 0})
             if pp and pp.get("hospital_id") and pp["hospital_id"] != u.get("hospital_id"):
                 raise HTTPException(403, "Session not in your hospital")
     elif u.get("role") not in ("patient", "patient_pending"):
         raise HTTPException(403, "Forbidden")
     details_in = body.details if isinstance(body.details, dict) else {}
     details_save = scrub_patient_submitted_details(details_in) if u.get("role") == "patient" else details_in
-    device_info = body.device_info or details_save.get("device_info") or {}
-    calibration_info = body.calibration_info or details_save.get("calibration_info") or {}
-    result_state = body.result_state or _derive_result_state(body.test_name, details_save)
-    latest = await db.test_results.find_one(
-        {"session_id": sid, "test_name": body.test_name, "is_latest": True},
-        {"_id": 0},
-        sort=[("revision", -1)],
-    )
-    revision = (latest.get("revision", 0) + 1) if latest else 1
-    ts = now_iso()
     doc = {
         "id": mk_id(), "session_id": sid, "test_name": body.test_name,
         "raw_score": body.raw_score, "normalized_score": body.normalized_score,
-        "details": details_save,
-        "result_state": result_state,
-        "age_at_test": patient_age,
-        "device_info": device_info,
-        "calibration_info": calibration_info,
-        "test_version": details_save.get("test_version") or "ambyo-core-2.2",
-        "rule_version": CLINICAL_RULE_VERSION,
-        "model_version": details_save.get("model_version") or details_save.get("quality_gate", {}).get("quality_model_version"),
-        "created_by": u.get("sub"),
-        "created_role": u.get("role"),
-        "created_at": ts,
-        "updated_at": ts,
-        "revision": revision,
-        "supersedes_result_id": latest.get("id") if latest else None,
-        "is_latest": True,
+        "details": details_save, "created_at": now_iso(),
     }
-    await db.test_results.update_many(
-        {"session_id": sid, "test_name": body.test_name, "is_latest": True},
-        {"$set": {"is_latest": False, "updated_at": ts}},
-    )
+    await db.test_results.delete_many({"session_id": sid, "test_name": body.test_name})
     await db.test_results.insert_one(doc.copy())
-    await audit("result.save", u, sid, {"test_name": body.test_name, "revision": revision, "result_state": result_state})
     return {"ok": True, "result_id": doc["id"]}
 
 @api_router.post("/sessions/{sid}/history")
@@ -863,7 +761,7 @@ async def complete_session(sid: str, u = Depends(current_user)):
                 raise HTTPException(403, "Session not in your hospital")
     elif u.get("role") not in ("patient", "patient_pending"):
         raise HTTPException(403, "Forbidden")
-    results = await db.test_results.find({"session_id": sid, "is_latest": {"$ne": False}}, {"_id": 0}).to_list(50)
+    results = await db.test_results.find({"session_id": sid}, {"_id": 0}).to_list(50)
     patient_doc = await db.patients.find_one({"id": s["patient_id"]}, {"age": 1, "_id": 0})
     patient_age = patient_doc.get("age") if patient_doc else None
     pred = classify_risk(
@@ -923,9 +821,6 @@ async def complete_session(sid: str, u = Depends(current_user)):
     session_update: Dict[str, Any] = {
         "status": "completed", "completed_at": now_iso(),
         "risk_level": pred["risk_level"], "risk_score": pred["risk_score"], "health_score": pred["health_score"],
-        "result_state": "needs_review" if pred["risk_level"] in ("incomplete", "mild", "moderate") else ("urgent_review" if pred["risk_level"] == "urgent" else "completed"),
-        "needs_doctor_review": pred["risk_level"] != "normal" or bool(pred.get("needs_clinician_review")),
-        "reviewed": False,
         "app_version": APP_VERSION,
         "clinical_rule_version": CLINICAL_RULE_VERSION,
         "quality_model_version": _qmv,
@@ -971,25 +866,17 @@ async def complete_session(sid: str, u = Depends(current_user)):
 async def get_session(sid: str, u = Depends(current_user)):
     s = await db.test_sessions.find_one({"id": sid}, {"_id": 0})
     if not s: raise HTTPException(404, "Session not found")
-    r = u.get("role") or ""
-    if r == "patient":
-        if s["patient_id"] != u["sub"]:
-            raise HTTPException(403, "Forbidden")
-    else:
-        await require_role(u, ["doctor", "optometrist", "field_worker", "hospital_admin", "admin", "super_admin"])
-        if not is_super_admin(u) and s.get("hospital_id") and u.get("hospital_id") != s.get("hospital_id"):
-            raise HTTPException(403, "Session not in your hospital")
+    if u.get("role") == "patient" and s["patient_id"] != u["sub"]:
+        raise HTTPException(403, "Forbidden")
     p = await db.patients.find_one({"id": s["patient_id"]}, {"_id": 0})
-    if r != "patient" and not is_super_admin(u) and u.get("hospital_id") and p and p.get("hospital_id") and p["hospital_id"] != u["hospital_id"]:
-        raise HTTPException(403, "Patient not in your hospital")
-    results = await db.test_results.find({"session_id": sid, "is_latest": {"$ne": False}}, {"_id": 0}).to_list(50)
-    result_history = await db.test_results.find({"session_id": sid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    results = await db.test_results.find({"session_id": sid}, {"_id": 0}).to_list(50)
     pred = await db.ai_predictions.find_one(
         {"session_id": sid},
         projection={"_id": 0},
         sort=[("prediction_revision_number", -1)],
     )
     diag = await db.doctor_diagnoses.find_one({"session_id": sid}, {"_id": 0})
+    r = u.get("role") or ""
     insights = None
     latest_insight: Optional[Dict[str, Any]] = None
     if can_see_ai_deviation_insights(r):
@@ -1013,8 +900,6 @@ async def get_session(sid: str, u = Depends(current_user)):
         "session": s, "patient": serialize_patient(p) if p else None,
         "results": results, "prediction": pred, "diagnosis": diag,
     }
-    if r != "patient":
-        out["result_history"] = result_history
     if can_see_ai_deviation_insights(r) and insights is not None:
         out["ai_deviation_insights"] = insights
 
@@ -1022,7 +907,6 @@ async def get_session(sid: str, u = Depends(current_user)):
     if latest_insight is not None and latest_insight.get("condition") is not None:
         safe_full = {
             "risk": latest_insight.get("risk"),
-            "confidence": latest_insight.get("confidence"),
             "model_version": latest_insight.get("model_version"),
         }
         rule_level = (pred or {}).get("risk_level") if isinstance(pred, dict) else None
@@ -1380,72 +1264,6 @@ async def save_diagnosis(body: DiagnosisIn, u = Depends(current_user)):
     await db.test_sessions.update_one({"id": body.session_id}, {"$set": {"reviewed": True, "reviewed_at": now_iso(), "reviewed_by": u["sub"]}})
     await audit("diagnosis.save", u, body.session_id, {"diagnosis": diagnosis_text[:80]})
     return {"ok": True, "diagnosis_id": doc["id"]}
-
-
-@api_router.post("/doctor/patching-plans")
-async def create_patching_plan(body: PatchingPlanIn, u = Depends(current_user)):
-    if not can_post_diagnosis(u):
-        raise HTTPException(403, "Only doctors may create patching plans")
-    p = await db.patients.find_one({"id": body.patient_id}, {"_id": 0})
-    if not p:
-        raise HTTPException(404, "Patient not found")
-    if not is_super_admin(u) and u.get("hospital_id") and p.get("hospital_id") and p["hospital_id"] != u["hospital_id"]:
-        raise HTTPException(403, "Patient not in your hospital")
-    if not body.schedule_note.strip():
-        raise HTTPException(400, "Patching plan must contain clinician-written instructions")
-    doc = {
-        "id": mk_id(),
-        "patient_id": body.patient_id,
-        "session_id": body.session_id,
-        "doctor_id": u["sub"],
-        "prescribed_eye": body.prescribed_eye,
-        "schedule_note": body.schedule_note,
-        "start_date": body.start_date,
-        "end_date": body.end_date,
-        "clinician_note": body.clinician_note,
-        "status": "active",
-        "safety_message": "Use patching only as prescribed by an eye-care professional.",
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
-    }
-    await db.patching_plans.insert_one(doc.copy())
-    await audit("patching_plan.create", u, doc["id"], {"patient_id": body.patient_id})
-    return {"ok": True, "plan": doc}
-
-
-@api_router.get("/patient/patching-plan")
-async def patient_patching_plan(u = Depends(current_user)):
-    await require_role(u, ["patient"])
-    plan = await db.patching_plans.find_one(
-        {"patient_id": u["sub"], "status": "active"},
-        {"_id": 0},
-        sort=[("created_at", -1)],
-    )
-    return {
-        "plan": plan,
-        "message": "Use patching only as prescribed by an eye-care professional.",
-    }
-
-
-@api_router.post("/patient/patching-logs")
-async def patient_patching_log(body: PatchingLogIn, u = Depends(current_user)):
-    await require_role(u, ["patient"])
-    plan = await db.patching_plans.find_one({"id": body.plan_id, "patient_id": u["sub"], "status": "active"}, {"_id": 0})
-    if not plan:
-        raise HTTPException(403, "Active doctor-created patching plan required")
-    status = body.status if body.status in ("completed", "missed", "partial") else "partial"
-    doc = {
-        "id": mk_id(),
-        "plan_id": body.plan_id,
-        "patient_id": u["sub"],
-        "status": status,
-        "minutes_completed": max(0, int(body.minutes_completed or 0)),
-        "parent_notes": body.parent_notes or "",
-        "created_at": now_iso(),
-    }
-    await db.patching_logs.insert_one(doc.copy())
-    await audit("patching_log.create", u, doc["id"], {"plan_id": body.plan_id, "status": status})
-    return {"ok": True, "log": doc}
 
 # ── Admin / hospital operations (P1.2)
 def _require_admin_api(u: Dict[str, Any]) -> None:

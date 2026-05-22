@@ -1,0 +1,13 @@
+# https://optivision.me — use with base compose:
+#   docker compose -f docker-compose.yml -f docker-compose.optivision.production.yml up -d --build
+#
+# TLS: Let's Encrypt on host at /etc/letsencrypt/live/optivision.me/
+# CORS: backend/.env → CORS_ORIGINS=https://optivision.me,https://www.optivision.me
+
+services:
+  frontend:
+    volumes:
+      - /etc/letsencrypt/live/optivision.me/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - /etc/letsencrypt/live/optivision.me/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      - ./nginx/optivision.me.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certbot/www:/var/www/certbot:ro

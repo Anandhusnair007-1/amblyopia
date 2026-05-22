@@ -6,10 +6,10 @@ const STYLES = {
   incomplete: "bg-slate-100 text-slate-700 border-slate-300",
 };
 const LABEL = {
-  normal: "No major concern",
-  mild: "Review suggested",
-  moderate: "Doctor review",
-  urgent: "Urgent review",
+  normal: "Normal",
+  mild: "Mild",
+  moderate: "Moderate",
+  urgent: "Urgent",
   incomplete: "Incomplete",
 };
 

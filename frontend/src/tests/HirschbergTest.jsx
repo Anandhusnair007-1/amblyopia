@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import TestStage from "@/tests/TestStage";
 import { speak } from "@/core/audio/AudioGuide";
 import { useI18n } from "@/core/i18n/translations";
+import {
+  classifyEyeZone,
+  aggregateHirschbergZones,
+  ZONE_LABELS,
+} from "@/core/clinical/hirschbergZones";
 
 export default function HirschbergTest({ patient, onComplete, flowIndex, flowTotal, flowLabels }) {
   const { lang } = useI18n();
@@ -143,6 +148,14 @@ export default function HirschbergTest({ patient, onComplete, flowIndex, flowTot
     };
   };
 
+  const zoneForSampleEye = (eye) => {
+    if (!eye) return null;
+    return classifyEyeZone({
+      displacementPx: eye.displacementPx,
+      irisDiameterPx: eye.irisDiameterPx,
+    });
+  };
+
   const onFaceData = (face) => {
     if (!face?.landmarks || phase !== "capture") return;
     const v = videoRef.current;
@@ -203,30 +216,44 @@ export default function HirschbergTest({ patient, onComplete, flowIndex, flowTot
 
       const PD_PER_MM = 22;
       const displacementMm = Math.max(leftMm, rightMm);
-      const estimatedPD = displacementMm * PD_PER_MM;
+      const estimatedPD_continuous = displacementMm * PD_PER_MM;
       const samplesCount = samples.length;
       const confidence = samplesCount >= 8 ? "adequate" : "low";
-      const risk = classifyRisk(estimatedPD);
 
-      const normalized = Math.max(0, Math.min(1, Math.abs(estimatedPD) / 30)); // 0..30 PD scaled
+      const last = samples[samples.length - 1];
+      const leftZone = zoneForSampleEye(last?.left);
+      const rightZone = zoneForSampleEye(last?.right);
+      const agg = aggregateHirschbergZones(leftZone, rightZone);
+      const predictedPD = agg.predicted_pd;
+      const risk = classifyRisk(predictedPD);
+
+      const normalized = Math.max(0, Math.min(1, Math.abs(predictedPD) / 45));
       speak("Capture complete.", { lang });
       finishedRef.current = true;
       setTimeout(() => onComplete({
-        raw_score: +estimatedPD.toFixed(2),
+        raw_score: predictedPD,
         normalized_score: +normalized.toFixed(3),
         details: {
           leftDisplacementMM: +leftMm.toFixed(3),
           rightDisplacementMM: +rightMm.toFixed(3),
           displacement_mm: +displacementMm.toFixed(3),
-          estimatedPD: confidence === "adequate" ? +estimatedPD.toFixed(2) : null,
-          alignment_proxy_index: +estimatedPD.toFixed(2),
+          predicted_pd: predictedPD,
+          hirschberg_zone: agg.hirschberg_zone,
+          hirschberg_zone_label: ZONE_LABELS[agg.zone] || agg.zone,
+          normalized_offset_r: agg.normalized_offset_r,
+          left_zone: leftZone?.zone ?? null,
+          right_zone: rightZone?.zone ?? null,
+          estimatedPD: confidence === "adequate" ? predictedPD : null,
+          estimatedPD_continuous: confidence === "adequate" ? +estimatedPD_continuous.toFixed(2) : null,
+          alignment_proxy_index: predictedPD,
           asymmetry: +asymmetry.toFixed(3),
           risk,
           samples: samplesCount,
           samples_count: samplesCount,
-          conversion_method: "max_displacement_mm_times_pd_per_mm",
+          conversion_method: "iris_radius_zone_mapping",
           pd_per_mm: PD_PER_MM,
           confidence,
+          measurement_type: "hirschberg_alignment_proxy",
           measurement_validity: "proxy",
           sample_preview: samples.slice(-3),
         },

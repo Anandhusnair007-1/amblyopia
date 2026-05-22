@@ -102,14 +102,14 @@ export function generateReport({
           ? "Routine follow-up suggested"
           : risk === "incomplete"
             ? "Screening incomplete"
-            : "No major screening concern on this pass";
+            : "No major screening concerns noted";
   if (patientFacing) {
     h2("Screening result");
     doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(10, 37, 64);
     doc.text(riskLabel, M, y);
     y += 28;
     para(
-      "This app provides screening and support only. It does not diagnose lazy eye, prescribe glasses, determine patching treatment, or replace an eye doctor. If screening is abnormal, incomplete, or if a child has eye turning, white pupil, poor vision, eye pain, trauma, or parent concern, consult a pediatric ophthalmologist or qualified eye-care professional."
+      "This summary is from an on-screen screening tool only. It is not a diagnosis or a clinic eye exam."
     );
     y += 6;
   } else {

@@ -155,6 +155,10 @@ export const translations = {
     test_titmus_desc: "On-screen depth screening proxy",
     test_red_reflex: "Red Reflex",
     test_red_reflex_desc: "Pupil reflex analysis",
+    red_reflex_capturing: "Capturing red reflex",
+    red_reflex_hold_still:
+      "Hold still. The screen flash helps show whether each pupil looks red (normal) or pale.",
+    red_reflex_complete: "Red reflex analysis complete.",
 
     // Consent screen additions
     consent_eyebrow: "Informed consent",

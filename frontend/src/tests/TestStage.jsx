@@ -144,7 +144,7 @@ export default function TestStage({
   const canManuallyStart = !requireStableDistance || distanceValid;
 
   return (
-    <section className="relative z-20 h-full min-h-0 overflow-hidden">
+    <section className="relative z-20 h-full min-h-0 overflow-hidden pt-[env(safe-area-inset-top)]">
       {requireCamera && (
         <WebRTCCamera
           onReady={(el) => {

@@ -53,6 +53,11 @@ Image_Summary_With_Embedded_Images1.xlsx
 # TLS material for production nginx mounts (see docker-compose.production.yml)
 ssl/
 
+# Server SSH keys — never commit
+optivision-server_key.pem
+*.pem
+!certbot/**/*.pem
+
 # Build & System
 build/
 frontend/build/

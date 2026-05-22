@@ -38,10 +38,4 @@ export function getOptotypePx(distanceCm, snellenDenominator, ppi = null) {
   return Math.max(12, Math.round((mm / 25.4) * p));
 }
 
-export function getOptotypePxFromCalibration(distanceCm, snellenDenominator, calibration = null) {
-  if (!calibration?.px_per_mm) return getOptotypePx(distanceCm, snellenDenominator);
-  const mm = optotypeHeightMm(distanceCm, snellenDenominator);
-  return Math.max(12, Math.round(mm * calibration.px_per_mm));
-}
-
 export const DEFAULT_TEST_DISTANCE_CM = 40;

@@ -23,5 +23,28 @@
   "prism_mild_pd": 4,
   "hirschberg_pd_per_mm": 22,
   "hirschberg_min_samples_confident": 8,
-  "hirschberg_conversion_method": "max_displacement_mm_times_pd_per_mm"
+  "hirschberg_conversion_method": "iris_radius_zone_mapping",
+  "hirschberg_zone_thresholds": {
+    "center_max_r": 0.35,
+    "pupil_edge_max_r": 0.85,
+    "mid_cornea_max_r": 1.35
+  },
+  "hirschberg_zone_pd": {
+    "center": 0,
+    "pupil_edge": 15,
+    "mid_cornea": 30,
+    "limbus": 45
+  },
+  "hirschberg_zone_moderate_pd": 30,
+  "titmus_arc_second_bands": [
+    { "min": 40, "max": 60, "label": "normal" },
+    { "min": 61, "max": 200, "label": "mild_impairment" },
+    { "min": 201, "max": 800, "label": "moderate" },
+    { "min": 801, "max": 2000, "label": "severe" },
+    { "min": 2001, "max": 99999, "label": "absence_stereo" }
+  ],
+  "red_reflex_red_ratio_min": 0.38,
+  "red_reflex_hue_red_max": 40,
+  "red_reflex_hue_red_min": 320,
+  "red_reflex_patch_size": 21
 }

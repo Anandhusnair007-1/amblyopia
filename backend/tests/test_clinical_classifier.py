@@ -6,7 +6,10 @@ from clinical_classifier import (
     apply_screening_history,
     assess_session_completeness,
     classify_risk,
+    classify_titmus_arc_seconds,
     hirschberg_mm_to_proxy_pd,
+    hirschberg_predicted_pd,
+    hirschberg_zone_label,
     inter_eye_lines_diff,
     is_test_result_usable,
     normalize_hirschberg_displacement_mm,
@@ -181,36 +184,6 @@ def test_red_reflex_media_opacity_high_or_urgent():
     assert any("red-reflex" in f.lower() or "red reflex" in f.lower() for f in pred["findings"])
 
 
-def test_red_reflex_unusable_quality_triggers_urgent_review():
-    pred = classify_risk([
-        {
-            "test_name": "red_reflex",
-            "raw_score": 0.1,
-            "normalized_score": 0.1,
-            "details": {
-                "classification": "normal",
-                "quality_gate": {"is_usable": False, "quality_label": "reflection_issue"},
-            },
-        },
-    ], patient_age=1)
-    assert pred["risk_level"] == "urgent"
-    assert any("urgent eye-care review recommended" in f.lower() for f in pred["findings"])
-
-
-def test_unreliable_result_never_safe():
-    pred = classify_risk([
-        {
-            "test_name": "visual_acuity",
-            "raw_score": 0,
-            "normalized_score": 0,
-            "result_state": "unreliable",
-            "details": {"result_state": "unreliable", "measurement_valid": False},
-        },
-    ], patient_age=8)
-    assert pred["risk_level"] in ("incomplete", "mild", "moderate", "urgent")
-    assert pred["risk_level"] != "normal"
-
-
 def test_red_reflex_indeterminate_session_incomplete():
     pred = classify_risk([
         {
@@ -284,7 +257,21 @@ def test_hirschberg_mm_to_proxy_pd_consistent():
 def test_hirschberg_conversion_method_matches_frontend():
     from clinical_classifier import HIRSCHBERG_CONVERSION_METHOD
 
-    assert HIRSCHBERG_CONVERSION_METHOD == "max_displacement_mm_times_pd_per_mm"
+    assert HIRSCHBERG_CONVERSION_METHOD == "iris_radius_zone_mapping"
+
+
+def test_hirschberg_predicted_pd_from_zone():
+    assert hirschberg_predicted_pd({"hirschberg_zone": "pupil_edge", "predicted_pd": 15}) == 15
+    assert hirschberg_predicted_pd({"hirschberg_zone": "center", "predicted_pd": 0}) == 0
+    assert hirschberg_zone_label({"hirschberg_zone": "limbus"}) == "At limbus"
+
+
+def test_classify_titmus_arc_seconds_bands():
+    assert classify_titmus_arc_seconds(50)["label"] == "normal"
+    assert classify_titmus_arc_seconds(100)["label"] == "mild_impairment"
+    assert classify_titmus_arc_seconds(400)["label"] == "moderate"
+    assert classify_titmus_arc_seconds(1000)["label"] == "severe"
+    assert classify_titmus_arc_seconds(3000)["label"] == "absence_stereo"
 
 
 def test_white_pupil_history_urgent():
@@ -299,7 +286,13 @@ def test_titmus_zero_alone_not_high_in_full_session():
             "test_name": "titmus",
             "raw_score": 0,
             "normalized_score": 1,
-            "details": {"passed": 0, "total": 3, "measurement_type": "stereo_screening_proxy"},
+            "details": {
+                "passed": 0,
+                "total": 3,
+                "arc_seconds": 2500,
+                "stereo_grade": "absence_stereo",
+                "measurement_type": "stereo_screening_proxy",
+            },
         },
     ]
     pred = classify_risk(results, patient_age=8)

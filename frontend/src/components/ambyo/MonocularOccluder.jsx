@@ -3,10 +3,10 @@ import { Eye } from "lucide-react";
 import { useI18n } from "@/core/i18n/translations";
 
 /**
- * @param {{ testingEye: 'OD' | 'OS', onContinue: () => void, onUnclear?: () => void }} props
+ * @param {{ testingEye: 'OD' | 'OS', onContinue: () => void }} props
  * OD = right eye tested → cover left
  */
-export default function MonocularOccluder({ testingEye, onContinue, onUnclear }) {
+export default function MonocularOccluder({ testingEye, onContinue }) {
   const { t } = useI18n();
   const coverSide = testingEye === "OD" ? "left" : "right";
 
@@ -33,11 +33,6 @@ export default function MonocularOccluder({ testingEye, onContinue, onUnclear })
         <p className="mt-3 text-sm text-slate-300 leading-relaxed">
           {t("va_cover_instruction")}
         </p>
-        <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">
-          {testingEye === "OD"
-            ? "Right eye test: cover the left eye. Keep the right eye open."
-            : "Left eye test: cover the right eye. Keep the left eye open."}
-        </p>
         <p className="mt-2 text-xs text-slate-500">{t("va_distance_40cm")}</p>
         <button
           type="button"
@@ -46,14 +41,6 @@ export default function MonocularOccluder({ testingEye, onContinue, onUnclear })
           className="mt-8 w-full rounded-2xl bg-teal-500 py-3.5 font-bold text-[#0A0F1C] shadow-lg hover:bg-teal-400 active:scale-[0.99] transition-all"
         >
           {t("va_ready_continue")}
-        </button>
-        <button
-          type="button"
-          data-testid="occluder-unclear"
-          onClick={onUnclear}
-          className="mt-3 w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-semibold text-slate-200"
-        >
-          I am not sure the correct eye is covered
         </button>
       </motion.div>
     </motion.div>

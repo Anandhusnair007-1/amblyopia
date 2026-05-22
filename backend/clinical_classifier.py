@@ -59,9 +59,6 @@ def required_tests_for_age(age_years: Optional[int]) -> List[str]:
 def is_test_result_usable(result: Dict[str, Any]) -> bool:
     """False when a test was skipped, failed capture, or cannot be scored."""
     d = result.get("details") or {}
-    state = str(result.get("result_state") or d.get("result_state") or d.get("test_status") or "").lower()
-    if state in ("incomplete", "skipped", "unreliable"):
-        return False
     if d.get("skipped"):
         return False
     if d.get("test_status") in ("incomplete", "skipped"):
@@ -76,9 +73,6 @@ def is_test_result_usable(result: Dict[str, Any]) -> bool:
     if name == "prism" and d.get("error"):
         return False
     if name == "red_reflex" and (d.get("classification") or "") == "indeterminate":
-        return False
-    qg = d.get("quality_gate") if isinstance(d.get("quality_gate"), dict) else {}
-    if qg and qg.get("is_usable") is False:
         return False
     return True
 
@@ -169,13 +163,72 @@ def inter_eye_lines_diff(od_den: float, os_den: float) -> int:
 HIRSCHBERG_PD_PER_MM = _num(CONSTANTS.get("hirschberg_pd_per_mm"), 22)
 HIRSCHBERG_MIN_SAMPLES_CONFIDENT = int(CONSTANTS.get("hirschberg_min_samples_confident", 8))
 HIRSCHBERG_CONVERSION_METHOD = str(
-    CONSTANTS.get("hirschberg_conversion_method", "max_displacement_mm_times_pd_per_mm")
+    CONSTANTS.get("hirschberg_conversion_method", "iris_radius_zone_mapping")
 )
+HIRSCHBERG_ZONE_PD = CONSTANTS.get("hirschberg_zone_pd") or {
+    "center": 0,
+    "pupil_edge": 15,
+    "mid_cornea": 30,
+    "limbus": 45,
+}
+HIRSCHBERG_ZONE_THRESHOLDS = CONSTANTS.get("hirschberg_zone_thresholds") or {
+    "center_max_r": 0.35,
+    "pupil_edge_max_r": 0.85,
+    "mid_cornea_max_r": 1.35,
+}
+HIRSCHBERG_ZONE_MODERATE_PD = _num(CONSTANTS.get("hirschberg_zone_moderate_pd"), 30)
+TITMUS_ARC_SECOND_BANDS = CONSTANTS.get("titmus_arc_second_bands") or [
+    {"min": 40, "max": 60, "label": "normal"},
+    {"min": 61, "max": 200, "label": "mild_impairment"},
+    {"min": 201, "max": 800, "label": "moderate"},
+    {"min": 801, "max": 2000, "label": "severe"},
+    {"min": 2001, "max": 99999, "label": "absence_stereo"},
+]
+
+ZONE_LABELS = {
+    "center": "Center",
+    "pupil_edge": "Pupil edge",
+    "mid_cornea": "Between pupil and limbus",
+    "limbus": "At limbus",
+}
 
 
 def hirschberg_mm_to_proxy_pd(mm: float) -> float:
-    """Consistent Hirschberg screening conversion (matches frontend storage)."""
+    """Legacy continuous conversion (mm × pd_per_mm)."""
     return mm * HIRSCHBERG_PD_PER_MM
+
+
+def hirschberg_predicted_pd(details: Dict[str, Any], raw_score: float = 0) -> float:
+    """Discrete zone grade (0, 15, 30, 45) when present; else continuous fallback."""
+    d = details or {}
+    if d.get("predicted_pd") is not None:
+        return _num(d.get("predicted_pd"))
+    zone = d.get("hirschberg_zone")
+    if zone and zone in HIRSCHBERG_ZONE_PD:
+        return _num(HIRSCHBERG_ZONE_PD[zone])
+    align = _num(d.get("alignment_proxy_index"))
+    if align > 0:
+        return align
+    return _num(raw_score)
+
+
+def hirschberg_zone_label(details: Dict[str, Any]) -> str:
+    zone = (details or {}).get("hirschberg_zone") or "center"
+    return ZONE_LABELS.get(zone, zone.replace("_", " ").title())
+
+
+def classify_titmus_arc_seconds(arc_seconds: float) -> Dict[str, Any]:
+    """Map estimated arc-seconds to Dr. Sandra stereo bands."""
+    arc = _num(arc_seconds, 2500)
+    for band in TITMUS_ARC_SECOND_BANDS:
+        if band["min"] <= arc <= band["max"]:
+            return {
+                "label": band["label"],
+                "arc_seconds": arc,
+                "band_min": band["min"],
+                "band_max": band["max"],
+            }
+    return {"label": "absence_stereo", "arc_seconds": arc, "band_min": 2001, "band_max": 99999}
 
 
 def _gaze_proxy_index(details: Dict[str, Any]) -> float:
@@ -185,6 +238,8 @@ def _gaze_proxy_index(details: Dict[str, Any]) -> float:
 
 def _alignment_proxy_index(details: Dict[str, Any], raw_score: float = 0) -> float:
     d = details or {}
+    if d.get("predicted_pd") is not None or d.get("hirschberg_zone"):
+        return hirschberg_predicted_pd(d, raw_score)
     return _num(d.get("alignment_proxy_index") or d.get("estimatedPD") or d.get("max_prism_diopters") or raw_score)
 
 
@@ -353,42 +408,37 @@ def classify_risk(
 
     rr = by_name.get("red_reflex")
     if rr:
-        cls = (rr.get("details") or {}).get("classification", "")
-        rr_details = rr.get("details") or {}
-        rr_qg = rr_details.get("quality_gate") if isinstance(rr_details.get("quality_gate"), dict) else {}
-        if rr_qg and rr_qg.get("is_usable") is False:
+        rrd = rr.get("details") or {}
+        cls = rrd.get("classification", "")
+        phone_note = (
+            "Consumer front-camera + screen flash (not coaxial fundus camera); "
+            "confirm abnormal results with clinical red-reflex exam."
+        )
+        if rrd.get("asymmetric"):
             findings.append(
-                "Urgent eye-care review recommended because the red-reflex image quality was not reliable enough "
-                "for safe screening."
+                "Red-reflex screening differed between eyes — specialist review advised."
             )
-            medical_findings.append({
-                "test": "Red Reflex",
-                "metric": "quality_gate",
-                "value": rr_qg.get("quality_label", "unusable"),
-                "threshold": "Reliable image quality required",
-                "interpretation": "Suspicious or unusable image quality on red-reflex screening — urgent review advised.",
-                "severity": "urgent",
-            })
-            rule_urgent = True
         if cls in ("leukocoria", "white"):
             findings.append(
-                "Urgent eye-care review recommended."
+                "Screening detected an abnormal pupil reflex pattern — "
+                "please consult an eye-care professional promptly."
             )
             medical_findings.append({
                 "test": "Red Reflex", "metric": "classification", "value": cls,
                 "threshold": "Expected: symmetric red/orange reflex on screening",
-                "interpretation": "Abnormal reflex pattern on screening — specialist review advised.",
+                "interpretation": f"Abnormal reflex on screening. {phone_note}",
                 "severity": "urgent",
             })
             rule_urgent = True
         elif cls == "absent":
             findings.append(
-                "Urgent eye-care review recommended."
+                "Screening could not detect a normal red reflex — "
+                "please consult an eye-care professional promptly."
             )
             medical_findings.append({
                 "test": "Red Reflex", "metric": "classification", "value": "absent",
                 "threshold": "Expected: visible red/orange reflex",
-                "interpretation": "Absent reflex on screening — specialist review advised.",
+                "interpretation": f"Absent reflex on screening. {phone_note}",
                 "severity": "urgent",
             })
             rule_urgent = True
@@ -470,36 +520,44 @@ def classify_risk(
     if hb and is_test_result_usable(hb):
         hbd = hb.get("details") or {}
         disp = normalize_hirschberg_displacement_mm(hbd, _num(hb.get("raw_score")))
+        predicted_pd = hirschberg_predicted_pd(hbd, _num(hb.get("raw_score")))
+        zone_lbl = hirschberg_zone_label(hbd)
         samples_n = int(hbd.get("samples") or hbd.get("samples_count") or 0)
         confident = samples_n >= HIRSCHBERG_MIN_SAMPLES_CONFIDENT
-        proxy_pd = hirschberg_mm_to_proxy_pd(disp)
-        has_alignment_proxy_signal = has_alignment_proxy_signal or disp > CONSTANTS["hirschberg_moderate_mm"]
-        pd_display = f"{proxy_pd:.1f}" if confident else "low confidence"
-        if disp > CONSTANTS["hirschberg_urgent_mm"]:
+        has_alignment_proxy_signal = (
+            has_alignment_proxy_signal
+            or disp > CONSTANTS["hirschberg_moderate_mm"]
+            or predicted_pd >= HIRSCHBERG_ZONE_MODERATE_PD
+        )
+        pd_display = f"{predicted_pd:.0f}Δ zone" if confident else "low confidence"
+        if disp > CONSTANTS["hirschberg_urgent_mm"] or predicted_pd >= 45:
             proxy_high_signal = True
             findings.append(
-                "Corneal reflex screening proxy shows marked asymmetry — confirm with an in-person exam."
+                f"Hirschberg zone estimate: {zone_lbl} (~{int(predicted_pd)}Δ proxy) — "
+                "confirm with an in-person exam."
             )
             medical_findings.append({
                 "test": "Hirschberg Proxy",
-                "metric": "displacement_mm",
-                "value": f"{disp:.1f} mm (proxy index {pd_display})",
+                "metric": "predicted_pd",
+                "value": f"{zone_lbl} ({pd_display}; {disp:.1f} mm displacement)",
                 "threshold": f"Screening proxy; {HIRSCHBERG_CONVERSION_METHOD}",
                 "interpretation": (
-                    f"Conversion {HIRSCHBERG_PD_PER_MM} per mm; samples={samples_n}. "
+                    f"Zone mapping 0/15/30/45Δ; samples={samples_n}. "
                     "Not a calibrated prism measurement."
                 ),
                 "severity": "moderate",
             })
-        elif disp > CONSTANTS["hirschberg_moderate_mm"]:
+        elif disp > CONSTANTS["hirschberg_moderate_mm"] or predicted_pd >= 15:
             proxy_mild_signal = True
-            findings.append("Mild corneal reflex asymmetry on screening proxy.")
+            findings.append(
+                f"Hirschberg zone estimate: {zone_lbl} (~{int(predicted_pd)}Δ proxy)."
+            )
             medical_findings.append({
                 "test": "Hirschberg Proxy",
-                "metric": "displacement_mm",
-                "value": f"{disp:.1f} mm",
+                "metric": "predicted_pd",
+                "value": f"{zone_lbl} ({int(predicted_pd)}Δ)",
                 "threshold": "Screening proxy",
-                "interpretation": f"pd_per_mm={HIRSCHBERG_PD_PER_MM}; samples={samples_n}.",
+                "interpretation": f"{HIRSCHBERG_CONVERSION_METHOD}; samples={samples_n}.",
                 "severity": "mild",
             })
 
@@ -629,30 +687,64 @@ def classify_risk(
 
     ts = by_name.get("titmus")
     if ts and is_test_result_usable(ts):
-        passed = (ts.get("details") or {}).get("passed", 0)
-        total = (ts.get("details") or {}).get("total", 3)
-        if passed == 0:
+        tsd = ts.get("details") or {}
+        arc = _num(tsd.get("arc_seconds"))
+        if arc <= 0:
+            passed = tsd.get("passed", 0)
+            total = tsd.get("total", 3)
+            if passed == 0:
+                arc = 2500
+            elif passed < total:
+                arc = 400
+            else:
+                arc = 50
+        stereo = classify_titmus_arc_seconds(arc)
+        label = stereo["label"]
+        if label == "absence_stereo":
             proxy_mild_signal = True
             findings.append(
-                "Stereo depth screening proxy showed no depth cues — "
-                "confirm with an in-person stereo test if clinically indicated."
+                "Stereo screening proxy suggests absent stereopsis — "
+                "confirm with an in-person Randot/Titmus test."
             )
             medical_findings.append({
                 "test": "Stereo Screening Proxy",
-                "metric": "passed",
-                "value": f"{passed}/{total}",
-                "threshold": "Not a validated Titmus test",
-                "interpretation": "Self-reported / on-screen proxy only — cannot rule out poor stereopsis alone.",
+                "metric": "arc_seconds_estimate",
+                "value": f">{stereo['band_min']} arc-sec ({label})",
+                "threshold": "Screening proxy bands",
+                "interpretation": "On-screen disparity proxy only — not validated Titmus.",
+                "severity": "moderate",
+            })
+        elif label == "severe":
+            proxy_mild_signal = True
+            findings.append(
+                f"Severe stereo impairment on screening proxy (~{int(arc)} arc-sec estimate)."
+            )
+            medical_findings.append({
+                "test": "Stereo Screening Proxy",
+                "metric": "arc_seconds_estimate",
+                "value": f"{int(arc)} arc-sec ({label})",
+                "threshold": "801–2000 severe",
+                "interpretation": "Confirm with clinic stereo test.",
                 "severity": "mild",
             })
-        elif passed < total:
+        elif label == "moderate":
             proxy_mild_signal = True
             medical_findings.append({
                 "test": "Stereo Screening Proxy",
-                "metric": "passed",
-                "value": f"{passed}/{total}",
-                "threshold": "Proxy only",
-                "interpretation": "Partial responses on stereo screening proxy.",
+                "metric": "arc_seconds_estimate",
+                "value": f"{int(arc)} arc-sec ({label})",
+                "threshold": "201–800 moderate",
+                "interpretation": "Moderate stereo proxy — clinical stereo test advised.",
+                "severity": "mild",
+            })
+        elif label == "mild_impairment":
+            proxy_mild_signal = True
+            medical_findings.append({
+                "test": "Stereo Screening Proxy",
+                "metric": "arc_seconds_estimate",
+                "value": f"{int(arc)} arc-sec ({label})",
+                "threshold": "61–200 mild",
+                "interpretation": "Mild stereo proxy signal.",
                 "severity": "mild",
             })
 
@@ -708,11 +800,6 @@ def classify_risk(
             "Screening session incomplete — some required tests were skipped, "
             "could not be scored, or need to be repeated."
         )
-
-    if any(str((r.get("result_state") or (r.get("details") or {}).get("result_state") or "")).lower() in ("unreliable", "needs_review", "urgent_review") for r in results):
-        findings.append("One or more screening results need doctor review before they can be considered reliable.")
-        if not rule_urgent and not rule_high:
-            rule_mild = True
 
     if rule_urgent:
         level, score = "urgent", 0.95

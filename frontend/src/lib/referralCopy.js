@@ -55,6 +55,13 @@ const PATIENT_PDF_BLOCKED_DETAIL_KEYS = new Set([
   "per_direction",
   "all_scores",
   "sample_preview",
+  "arc_seconds",
+  "predicted_pd",
+  "hirschberg_zone",
+  "hirschberg_zone_label",
+  "normalized_offset_r",
+  "per_eye",
+  "estimatedPD_continuous",
 ]);
 
 const PATIENT_PDF_ALLOWED_DETAIL_KEYS = new Set([
@@ -78,6 +85,9 @@ const PATIENT_PDF_ALLOWED_DETAIL_KEYS = new Set([
   "confidence",
   "quality_gate",
   "classification",
+  "stereo_grade",
+  "stereo_grade_label",
+  "asymmetric",
 ]);
 
 export function pdfReportTitle(patientFacing) {
@@ -112,7 +122,7 @@ export function patientPdfTextIsSafe(text) {
 export function screeningResultRingLabel(riskLevel) {
   const risk = riskLevel || "normal";
   const map = {
-    normal: { line1: "No major", line2: "concern" },
+    normal: { line1: "Screening", line2: "OK" },
     mild: { line1: "Routine", line2: "follow-up" },
     moderate: { line1: "Eye-care", line2: "visit" },
     urgent: { line1: "Prompt", line2: "follow-up" },

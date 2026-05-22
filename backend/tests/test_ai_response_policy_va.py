@@ -38,6 +38,7 @@ def test_titmus_patient_safe_includes_stereo_proxy_metadata():
         {
             "passed": 1,
             "total": 3,
+            "stereo_grade": "mild_impairment",
             "measurement_type": "stereo_screening_proxy",
             "stereo_screening_proxy": True,
             "true_stereopsis_test": False,
@@ -46,3 +47,5 @@ def test_titmus_patient_safe_includes_stereo_proxy_metadata():
     assert out["measurement_type"] == "stereo_screening_proxy"
     assert out.get("stereo_screening_proxy") is True
     assert out.get("true_stereopsis_test") is False
+    assert out.get("stereo_grade") == "mild_impairment"
+    assert "arc_seconds" not in out

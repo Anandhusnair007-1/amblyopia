@@ -2,22 +2,18 @@ import { useEffect, useRef } from "react";
 import TestStage from "@/tests/TestStage";
 import { speak } from "@/core/audio/AudioGuide";
 import { useI18n } from "@/core/i18n/translations";
+import {
+  averageRgbFromImageData,
+  classifyRedReflexEye,
+  aggregateRedReflex,
+  DEFAULT_RED_REFLEX_THRESHOLDS,
+} from "@/core/clinical/redReflexAnalysis";
 
-function rgbToHsv(r, g, b) {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-  let h = 0;
-  if (d !== 0) {
-    if (max === r) h = 60 * (((g - b) / d) % 6);
-    else if (max === g) h = 60 * ((b - r) / d + 2);
-    else h = 60 * ((r - g) / d + 4);
-    if (h < 0) h += 360;
-  }
-  return { h, s: max === 0 ? 0 : d / max, v: max };
-}
+const PATCH = DEFAULT_RED_REFLEX_THRESHOLDS.patch_size ?? 21;
+const HALF = Math.floor(PATCH / 2);
 
 export default function RedReflexTest({ patient, onComplete, flowIndex, flowTotal, flowLabels }) {
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   const age = patient?.age ?? 8;
   const videoRef = useRef(null);
   const samplesRef = useRef([]);
@@ -26,61 +22,101 @@ export default function RedReflexTest({ patient, onComplete, flowIndex, flowTota
   const onFaceData = (face) => {
     if (face?.landmarks && face.landmarks.length >= 478) {
       samplesRef.current.push({
-        leftIris: face.landmarks[468], rightIris: face.landmarks[473],
-        w: face.imageWidthPx, h: face.imageHeightPx,
+        leftIris: face.landmarks[468],
+        rightIris: face.landmarks[473],
+        w: face.imageWidthPx,
+        h: face.imageHeightPx,
       });
     }
   };
 
+  const samplePatch = (ctx, canvas, iris) => {
+    const sx = Math.floor(iris.x * canvas.width);
+    const sy = Math.floor(iris.y * canvas.height);
+    const x0 = Math.max(0, sx - HALF);
+    const y0 = Math.max(0, sy - HALF);
+    const w = Math.min(PATCH, canvas.width - x0);
+    const h = Math.min(PATCH, canvas.height - y0);
+    if (w < 4 || h < 4) return null;
+    const data = ctx.getImageData(x0, y0, w, h).data;
+    return averageRgbFromImageData(data);
+  };
+
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (finishedRef.current) return;
       finishedRef.current = true;
       const samples = samplesRef.current;
       const v = videoRef.current;
       let classification = "absent";
-      let hsvL = null, hsvR = null;
-      if (samples.length > 0 && v) {
+      let perEye = { left: null, right: null };
+      let asymmetric = false;
+
+      if (samples.length > 0 && v && v.videoWidth > 0) {
         const canvas = document.createElement("canvas");
-        canvas.width = v.videoWidth; canvas.height = v.videoHeight;
-        const ctx = canvas.getContext("2d");
+        canvas.width = v.videoWidth;
+        canvas.height = v.videoHeight;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
         const last = samples[samples.length - 1];
-        const sx = Math.floor(last.leftIris.x * canvas.width);
-        const sy = Math.floor(last.leftIris.y * canvas.height);
-        const rx = Math.floor(last.rightIris.x * canvas.width);
-        const ry = Math.floor(last.rightIris.y * canvas.height);
         try {
-          const L = ctx.getImageData(Math.max(0, sx - 5), Math.max(0, sy - 5), 11, 11).data;
-          const R = ctx.getImageData(Math.max(0, rx - 5), Math.max(0, ry - 5), 11, 11).data;
-          const avg = (d) => { let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i+1]; b += d[i+2]; n++; } return [r/n, g/n, b/n]; };
-          const [lr, lg, lb] = avg(L); const [rr, rg, rb] = avg(R);
-          hsvL = rgbToHsv(lr, lg, lb); hsvR = rgbToHsv(rr, rg, rb);
-          const H = (hsvL.h + hsvR.h) / 2, S = (hsvL.s + hsvR.s) / 2, V = (hsvL.v + hsvR.v) / 2;
-          if (V < 0.1) classification = "absent";
-          else if (V > 0.85 && S < 0.2) classification = "leukocoria";
-          else if ((H < 30 || H > 330) && S > 0.35 && V > 0.3) classification = "normal";
-          else if (V < 0.35) classification = "dim";
-          else classification = "media_opacity";
-        } catch (e) { classification = "indeterminate"; }
+          const leftRgb = samplePatch(ctx, canvas, last.leftIris);
+          const rightRgb = samplePatch(ctx, canvas, last.rightIris);
+          const left = classifyRedReflexEye(leftRgb);
+          const right = classifyRedReflexEye(rightRgb);
+          const agg = aggregateRedReflex(left, right);
+          classification = agg.classification;
+          asymmetric = agg.asymmetric;
+          perEye = {
+            left: {
+              classification: left.classification,
+              hsv: left.hsv,
+              red_ratio: left.red_ratio != null ? +left.red_ratio.toFixed(3) : null,
+            },
+            right: {
+              classification: right.classification,
+              hsv: right.hsv,
+              red_ratio: right.red_ratio != null ? +right.red_ratio.toFixed(3) : null,
+            },
+          };
+        } catch (e) {
+          classification = "indeterminate";
+        }
       }
-      speak("Red reflex analysis complete.", { lang });
-      const riskMap = { normal: 0.05, dim: 0.4, media_opacity: 0.55, leukocoria: 0.95, absent: 0.9, indeterminate: 0.3 };
+
+      speak(t("red_reflex_complete") || "Red reflex analysis complete.", { lang });
+      const riskMap = {
+        normal: 0.05,
+        dim: 0.4,
+        media_opacity: 0.55,
+        leukocoria: 0.95,
+        absent: 0.9,
+        indeterminate: 0.3,
+      };
       const normalized = riskMap[classification] ?? 0.3;
       const incomplete = classification === "indeterminate";
-      setTimeout(() => onComplete({
-        raw_score: normalized, normalized_score: normalized,
-        details: {
-          classification,
-          samples: samples.length,
-          hsv_left: hsvL,
-          hsv_right: hsvR,
-          test_status: incomplete ? "incomplete" : "completed",
-          measurement_valid: !incomplete,
-        },
-      }), 900);
+      setTimeout(
+        () =>
+          onComplete({
+            raw_score: normalized,
+            normalized_score: normalized,
+            details: {
+              classification,
+              asymmetric,
+              per_eye: perEye,
+              samples: samples.length,
+              flash_used: true,
+              camera_type: "consumer_front",
+              patch_size: PATCH,
+              test_status: incomplete ? "incomplete" : "completed",
+              measurement_valid: !incomplete,
+              measurement_type: "red_reflex_screening_proxy",
+            },
+          }),
+        900
+      );
     }, 2000);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line
   }, []);
 
@@ -95,8 +131,14 @@ export default function RedReflexTest({ patient, onComplete, flowIndex, flowTota
     >
       {() => (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-white">
-          <div className="text-center">
-            <div className="text-slate-600 uppercase tracking-[0.3em] text-xs font-bold">Capturing red reflex</div>
+          <div className="text-center px-6 max-w-md">
+            <div className="text-slate-600 uppercase tracking-[0.3em] text-xs font-bold">
+              {t("red_reflex_capturing") || "Capturing red reflex"}
+            </div>
+            <p className="mt-3 text-slate-500 text-sm">
+              {t("red_reflex_hold_still") ||
+                "Hold still. The screen flash helps show whether each pupil looks red (normal) or pale."}
+            </p>
             <div className="mt-4 inline-block">
               <div className="w-16 h-16 rounded-full border-4 border-red-200 border-t-red-600 animate-spin" />
             </div>

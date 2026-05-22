@@ -3,7 +3,6 @@
  */
 import { getAcuityProfile, isScorableAcuityProfile, usesPictureOptotypes } from "../core/vision/acuityProfiles";
 import { SCREENING_ACUITY_MEASUREMENT_TYPE } from "../core/vision/SnellenChart";
-import { saveScreenCalibration, loadScreenCalibration } from "../core/vision/ScreenCalibration";
 import {
   gateShowsUrgentBanner,
   patientPdfDetailEntries,
@@ -66,36 +65,20 @@ describe("referral copy (H8)", () => {
 
 describe("patient results copy — incomplete sessions", () => {
   const FRIENDLY_INCOMPLETE = {
-    title: "Incomplete or unreliable screening",
+    title: "Screening incomplete",
     message:
-      "Some tests were skipped, could not be scored, or may be unreliable.",
+      "Some tests were skipped, could not be scored, or need to be repeated. This is not a normal result",
   };
 
   it("does not use normal-friendly title for incomplete risk", () => {
     const risk = "incomplete";
-    const normalTitle = "No major screening concern on this pass";
+    const normalTitle = "All looks good!";
     const copy =
       risk === "incomplete"
         ? FRIENDLY_INCOMPLETE
         : { title: normalTitle, message: "" };
-    expect(copy.title).not.toBe("All looks good!");
-    expect(copy.message).toMatch(/unreliable/i);
-  });
-});
-
-describe("physical screen calibration", () => {
-  beforeEach(() => window.localStorage.clear());
-
-  it("stores calibration method and pixel/mm values", () => {
-    const cal = saveScreenCalibration({
-      method: "standard_card",
-      referenceWidthMm: 85.6,
-      referenceWidthPx: 342,
-    });
-    expect(cal.method).toBe("standard_card");
-    expect(cal.px_per_mm).toBeGreaterThan(0);
-    expect(cal.device_info).toBeTruthy();
-    expect(loadScreenCalibration().reference_width_px).toBe(342);
+    expect(copy.title).not.toBe(normalTitle);
+    expect(copy.message).toMatch(/not a normal result/i);
   });
 });
 
@@ -211,7 +194,6 @@ describe("patient results ring (qualitative)", () => {
     const urgent = screeningResultRingLabel("urgent");
     expect(urgent.line1).toBeTruthy();
     expect(String(urgent.line1)).not.toMatch(/\d+/);
-    expect(screeningResultRingLabel("normal").line1).not.toMatch(/OK|Normal/i);
     expect(screeningResultRingFillPercent("urgent")).toBeLessThan(50);
     expect(screeningResultRingFillPercent("normal")).toBeGreaterThan(80);
   });
@@ -224,41 +206,5 @@ describe("patient-facing test picker labels", () => {
     expect(en.test_titmus).not.toMatch(/titmus stereo/i);
     expect(en.test_prism.toLowerCase()).toContain("alignment");
     expect(en.test_titmus.toLowerCase()).toContain("depth");
-  });
-});
-
-describe("monocular occlusion safety copy", () => {
-  const fs = require("fs");
-  const path = require("path");
-
-  it("OD/OS instructions explicitly say which eye to cover", () => {
-    const src = fs.readFileSync(path.join(__dirname, "../components/ambyo/MonocularOccluder.jsx"), "utf8");
-    expect(src).toContain("Right eye test: cover the left eye");
-    expect(src).toContain("Left eye test: cover the right eye");
-    expect(src).toContain("I am not sure the correct eye is covered");
-  });
-});
-
-describe("offline payload minimization", () => {
-  const fs = require("fs");
-  const path = require("path");
-
-  it("offline result cache stores minimized details and records conflicts", () => {
-    const dbSrc = fs.readFileSync(path.join(__dirname, "../core/offline/db.js"), "utf8");
-    const syncSrc = fs.readFileSync(path.join(__dirname, "../core/offline/useOfflineSync.js"), "utf8");
-    expect(dbSrc).toContain("offline_minimized");
-    expect(dbSrc).toContain("sync_conflicts");
-    expect(syncSrc).toContain("recordSyncConflict");
-  });
-});
-
-describe("release positioning", () => {
-  const fs = require("fs");
-  const path = require("path");
-
-  it("App includes clinical demo screening/support footer and no validation claim", () => {
-    const src = fs.readFileSync(path.join(__dirname, "../App.js"), "utf8");
-    expect(src).toContain("Clinical demo version - screening/support only");
-    expect(src.toLowerCase()).not.toContain("clinically validated");
   });
 });

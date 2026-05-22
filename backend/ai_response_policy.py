@@ -131,29 +131,20 @@ def build_patient_safe_strabismus_json(
     Response body for POST /api/ai/analyze-strabismus when caller is a patient.
     Omits condition, confidence, and class scores; risk + plain-language guidance only.
     """
-    confidence = full.get("confidence")
-    try:
-        confidence_f = float(confidence)
-    except (TypeError, ValueError):
-        confidence_f = 0.0
-    rule = str(rule_based_risk_level or "normal").lower()
-    uncertain = confidence is not None and confidence_f < 0.65
-    ai_raw = "mild" if uncertain and rule != "urgent" else (full.get("risk") or "normal")
+    ai_raw = full.get("risk") or "normal"
     risk_key = cap_patient_strabismus_risk(ai_raw, rule_based_risk_level)
+    rule = str(rule_based_risk_level or "normal").lower()
     if risk_key == "urgent" and rule == "urgent":
         recommendation = (
             "Important screening findings detected. Please see an eye doctor as soon as possible."
         )
-    elif uncertain:
-        recommendation = PATIENT_AI_REVIEW_ONLY
     elif risk_key == "normal":
-        recommendation = "No major screening concern on this pass. Continue regular eye check-ups."
+        recommendation = "Your eye screening looks good. Continue regular check-ups."
     else:
         recommendation = PATIENT_AI_REVIEW_ONLY
     return {
         "screening_complete": True,
         "risk": risk_key,
-        "uncertain": uncertain,
         "recommendation": recommendation,
         "disclaimer": (
             "This is an AI-assisted screening tool. It is not a medical diagnosis."
@@ -293,6 +284,9 @@ def sanitize_detail_for_patient(test_name: str, details: Optional[Dict[str, Any]
         out["measurement_type"] = details.get("measurement_type", "stereo_screening_proxy")
         out["stereo_screening_proxy"] = details.get("stereo_screening_proxy", True)
         out["true_stereopsis_test"] = details.get("true_stereopsis_test", False)
+        grade = details.get("stereo_grade")
+        if grade:
+            out["stereo_grade"] = grade
         if details.get("test_status"):
             out["test_status"] = details["test_status"]
         return out
@@ -308,29 +302,28 @@ def sanitize_detail_for_patient(test_name: str, details: Optional[Dict[str, Any]
             out["note"] = "low_sample_count"
             out["screening_status"] = "repeat screening recommended"
         else:
-            mm = details.get("displacement_mm")
-            if mm is not None:
-                m = float(mm)
-                if m >= 4:
+            pd = details.get("predicted_pd")
+            if pd is not None:
+                p = float(pd)
+                if p >= 30:
                     out["screening_status"] = "needs review"
-                elif m >= 2:
+                elif p >= 15:
                     out["screening_status"] = "notable alignment screening signal"
                 else:
                     out["screening_status"] = "within screening range"
             else:
-                out["screening_status"] = "recorded"
+                mm = details.get("displacement_mm")
+                if mm is not None:
+                    m = float(mm)
+                    if m >= 4:
+                        out["screening_status"] = "needs review"
+                    elif m >= 2:
+                        out["screening_status"] = "notable alignment screening signal"
+                    else:
+                        out["screening_status"] = "within screening range"
+                else:
+                    out["screening_status"] = "recorded"
             out["measurement_valid"] = True
-        return out
-
-    if test_name == "red_reflex":
-        cls = str(details.get("classification") or "").lower()
-        out["measurement_type"] = details.get("measurement_type", "red_reflex_screening")
-        if cls in ("leukocoria", "white", "absent", "media_opacity"):
-            out["screening_status"] = "urgent eye-care review recommended"
-        elif cls in ("dim", "indeterminate"):
-            out["screening_status"] = "result needs doctor review"
-        elif cls:
-            out["screening_status"] = "no major screening concern on this pass"
         return out
 
     return out

@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, Mic } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getOptotypePxFromCalibration,
+  getOptotypePx,
   estimatePpi,
   DEFAULT_TEST_DISTANCE_CM,
   SCREENING_ACUITY_MEASUREMENT_TYPE,
@@ -25,7 +25,6 @@ import {
   normalizedScoreFromDen,
 } from "@/core/vision/AcuityEngine";
 import { getAcuityProfile, isScorableAcuityProfile } from "@/core/vision/acuityProfiles";
-import { getDeviceInfo } from "@/core/vision/ScreenCalibration";
 
 const DIRS = ["up", "right", "down", "left"];
 
@@ -45,10 +44,7 @@ function AcuityRunPanel({
   ready,
   testingEye,
   distanceCm,
-  distanceValid = true,
-  calibration,
   onEyeComplete,
-  onEyeUnclear,
 }) {
   const { lang, t } = useI18n();
   const voiceOk = isSpeechRecognitionSupported();
@@ -89,13 +85,12 @@ function AcuityRunPanel({
         eye: testingEye,
         measurement_valid: true,
         test_status: "completed",
-        result_state: "completed",
       });
     }, 700);
   }, [lang, onEyeComplete, passedLines, testingEye]);
 
   const onAnswer = useCallback((ans) => {
-    if (finishedRef.current || !distanceValid) return;
+    if (finishedRef.current) return;
     listenGenRef.current += 1;
     const correct = ans === currentDirRef.current;
     setDirAnswer({ ans, correct });
@@ -116,10 +111,10 @@ function AcuityRunPanel({
         });
       }
     }, 550);
-  }, [distanceValid, finishEye, lineIdx, pickDir]);
+  }, [finishEye, lineIdx, pickDir]);
 
   const listen = useCallback(async ({ auto = false } = {}) => {
-    if (listening || finishedRef.current || !distanceValid) return;
+    if (listening || finishedRef.current) return;
     if (!voiceOk) {
       if (!auto) toast.error(t("voice_not_supported"));
       return;
@@ -150,10 +145,10 @@ function AcuityRunPanel({
       setVoiceHint(t("voice_say_direction"));
       if (!auto) toast.message(t("voice_say_direction"));
     }
-  }, [listening, voiceOk, lang, t, onAnswer, distanceValid]);
+  }, [listening, voiceOk, lang, t, onAnswer]);
 
   useEffect(() => {
-    if (!ready || !distanceValid || dirAnswer || listening || finishedRef.current) return;
+    if (!ready || dirAnswer || listening || finishedRef.current) return;
     let cancelled = false;
     const tmr = setTimeout(() => {
       if (!cancelled) listen({ auto: true });
@@ -163,13 +158,11 @@ function AcuityRunPanel({
       clearTimeout(tmr);
       listenGenRef.current += 1;
     };
-  }, [ready, lineIdx, displayDir, dirAnswer, listening, listen, distanceValid]);
+  }, [ready, lineIdx, displayDir, dirAnswer, listening, listen]);
 
   const den = SNELLEN_DENOMINATORS[lineIdx];
   const dist = distanceCm ?? DEFAULT_TEST_DISTANCE_CM;
-  const size = calibration
-    ? getOptotypePxFromCalibration(dist, den, calibration)
-    : getOptotypePxFromCalibration(dist, den, { px_per_mm: ppiRef.current / 25.4 });
+  const size = getOptotypePx(dist, den, ppiRef.current);
 
   return (
     <motion.div layout className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-24">
@@ -184,15 +177,9 @@ function AcuityRunPanel({
           <p className="mt-2 text-sm text-slate-400">{t("voice_say_direction_short")}</p>
         )}
         <p className="mt-2 text-xs text-slate-500 max-w-sm mx-auto">
-          {calibration ? "Calibrated near-screen screening estimate — not a clinic eye exam." : "Near-screen screening estimate only — not a clinic eye exam."}
+          Near-screen screening estimate only — not a clinic eye exam.
         </p>
       </motion.div>
-
-      {ready && !distanceValid && (
-        <div className="absolute inset-x-4 top-40 z-30 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-center text-sm font-semibold text-amber-900 shadow-xl">
-          Move back to the guided distance and hold steady. Answers are paused while distance is unreliable.
-        </div>
-      )}
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -238,14 +225,6 @@ function AcuityRunPanel({
           <motion.div layout />
         </motion.div>
         <MicIndicator active={listening} listening={listening} transcript={transcript} hint={voiceHint} unsupported={!voiceOk} />
-        <button
-          type="button"
-          data-testid="va-eye-unclear"
-          onClick={onEyeUnclear}
-          className="text-xs font-semibold text-amber-200 underline underline-offset-4"
-        >
-          Wrong or unclear eye covered
-        </button>
       </div>
     </motion.div>
   );
@@ -279,12 +258,10 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
   const scorable = isScorableAcuityProfile(profile);
   const [phase, setPhase] = useState("occlude_od");
   const odRef = useRef(null);
-  const distanceCm = measuredDistance?.value ?? measuredDistance ?? DEFAULT_TEST_DISTANCE_CM;
-  const calibration = measuredDistance?.calibration || null;
-  const distanceValid = measuredDistance?.valid ?? true;
+  const distanceCm = measuredDistance ?? DEFAULT_TEST_DISTANCE_CM;
   const incompleteSubmittedRef = useRef(false);
 
-  const submitIncomplete = useCallback((reason = "picture_optotype_not_scorable", overrides = {}) => {
+  const submitIncomplete = useCallback(() => {
     if (incompleteSubmittedRef.current) return;
     incompleteSubmittedRef.current = true;
     speak("Visual acuity screening is not available for this age on this device.", { lang });
@@ -293,7 +270,6 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
       normalized_score: 0,
       details: {
         test_status: "incomplete",
-        result_state: "incomplete",
         measurement_valid: false,
         measurement_type: SCREENING_ACUITY_MEASUREMENT_TYPE,
         test_distance_cm: Math.round(distanceCm),
@@ -301,10 +277,9 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
         notation: SCREENING_ACUITY_DISCLAIMER,
         profile,
         age,
-        reason,
+        reason: "picture_optotype_not_scorable",
         od: { test_status: "incomplete", measurement_valid: false },
         os: { test_status: "incomplete", measurement_valid: false },
-        ...overrides,
       },
     });
   }, [age, distanceCm, lang, onComplete, profile]);
@@ -322,12 +297,9 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
       details: {
         measurement_type: SCREENING_ACUITY_MEASUREMENT_TYPE,
         test_status: "completed",
-        result_state: "completed",
         measurement_valid: true,
         test_distance_cm: Math.round(distanceCm),
-        calibrated: !!calibration,
-        calibration_info: calibration,
-        device_info: getDeviceInfo(),
+        calibrated: false,
         notation: SCREENING_ACUITY_DISCLAIMER,
         ppi_estimate: estimatePpi(),
         profile,
@@ -345,7 +317,7 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
         snellen_label: screeningLineLabel(worse),
       },
     }), 800);
-  }, [age, calibration, distanceCm, lang, onComplete, profile]);
+  }, [age, distanceCm, lang, onComplete, profile]);
 
   const handleOdComplete = (eyeData) => {
     odRef.current = eyeData;
@@ -357,27 +329,15 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
     submitBoth(odRef.current, eyeData);
   };
 
-  const handleEyeUnclear = () => {
-    setPhase("done");
-    submitIncomplete("wrong_or_unclear_occlusion", {
-      test_status: "unreliable",
-      result_state: "unreliable",
-      measurement_valid: false,
-      occlusion_verified: false,
-      od: { test_status: "unreliable", measurement_valid: false },
-      os: { test_status: "unreliable", measurement_valid: false },
-    });
-  };
-
   if (!scorable) {
     return <PictureAcuityUnavailable age={age} onContinue={submitIncomplete} />;
   }
 
   if (phase === "occlude_od") {
-    return <MonocularOccluder testingEye="OD" onContinue={() => setPhase("test_od")} onUnclear={handleEyeUnclear} />;
+    return <MonocularOccluder testingEye="OD" onContinue={() => setPhase("test_od")} />;
   }
   if (phase === "occlude_os") {
-    return <MonocularOccluder testingEye="OS" onContinue={() => setPhase("test_os")} onUnclear={handleEyeUnclear} />;
+    return <MonocularOccluder testingEye="OS" onContinue={() => setPhase("test_os")} />;
   }
 
   if (phase === "test_od") {
@@ -386,10 +346,7 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
         ready={ready}
         testingEye="OD"
         distanceCm={distanceCm}
-        distanceValid={distanceValid}
-        calibration={calibration}
         onEyeComplete={handleOdComplete}
-        onEyeUnclear={handleEyeUnclear}
       />
     );
   }
@@ -400,10 +357,7 @@ function VisualAcuityPanel({ ready, patient, onComplete, measuredDistance }) {
         ready={ready}
         testingEye="OS"
         distanceCm={distanceCm}
-        distanceValid={distanceValid}
-        calibration={calibration}
         onEyeComplete={handleOsComplete}
-        onEyeUnclear={handleEyeUnclear}
       />
     );
   }
@@ -420,12 +374,12 @@ export default function VisualAcuityTest(props) {
       age={age}
       progress={props.flowTotal ? { index: props.flowIndex || 0, total: props.flowTotal, labels: props.flowLabels || [] } : null}
     >
-      {({ ready, distance, distanceValid, calibration }) => (
+      {({ ready, distance }) => (
         <VisualAcuityPanel
           ready={ready}
           patient={props.patient}
           onComplete={props.onComplete}
-          measuredDistance={{ value: distance, valid: distanceValid, calibration }}
+          measuredDistance={distance}
         />
       )}
     </TestStage>
